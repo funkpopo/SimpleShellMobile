@@ -1,6 +1,5 @@
 package com.example.simpleshell.ui.screens.terminal
 
-import android.Manifest
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.os.Build
@@ -48,6 +47,7 @@ import androidx.core.content.ContextCompat
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.example.simpleshell.service.ConnectionForegroundService
 import com.example.simpleshell.ui.util.AnsiParser
+import com.example.simpleshell.ui.util.POST_NOTIFICATIONS_PERMISSION
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -90,7 +90,7 @@ fun TerminalScreen(
             val hasNotificationPermission = if (Build.VERSION.SDK_INT >= 33) {
                 ContextCompat.checkSelfPermission(
                     context,
-                    Manifest.permission.POST_NOTIFICATIONS
+                    POST_NOTIFICATIONS_PERMISSION
                 ) == PackageManager.PERMISSION_GRANTED
             } else {
                 true
@@ -101,7 +101,7 @@ fun TerminalScreen(
             } else {
                 if (!askedNotificationPermission) {
                     askedNotificationPermission = true
-                    notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+                    notificationPermissionLauncher.launch(POST_NOTIFICATIONS_PERMISSION)
                 }
             }
         }

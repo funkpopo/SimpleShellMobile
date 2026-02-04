@@ -121,7 +121,8 @@ class SftpViewModel @Inject constructor(
 
     fun navigateUp(): Boolean {
         if (pathHistory.size > 1) {
-            pathHistory.removeLast()
+            // Avoid calling java.util.List#removeLast which requires newer API levels.
+            pathHistory.removeAt(pathHistory.lastIndex)
             val previousPath = pathHistory.last()
             loadFiles(previousPath)
             return true

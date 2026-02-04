@@ -1,7 +1,7 @@
 package com.example.simpleshell.ssh
 
 import android.content.Context
-import android.net.Uri
+import androidx.core.net.toUri
 import java.io.File
 import java.io.FileOutputStream
 
@@ -32,7 +32,7 @@ internal fun materializePrivateKey(context: Context, raw: String): MaterializedP
         }
 
         trimmed.startsWith("content://") -> {
-            val uri = Uri.parse(trimmed)
+            val uri = trimmed.toUri()
             val tmp = File.createTempFile("simpleshell_key_", ".pem", context.cacheDir)
             context.contentResolver.openInputStream(uri).use { input ->
                 requireNotNull(input) { "Unable to open key Uri" }
@@ -46,7 +46,7 @@ internal fun materializePrivateKey(context: Context, raw: String): MaterializedP
         }
 
         trimmed.startsWith("file://") -> {
-            val path = Uri.parse(trimmed).path ?: trimmed.removePrefix("file://")
+            val path = trimmed.toUri().path ?: trimmed.removePrefix("file://")
             MaterializedPrivateKey(file = File(path), isTemp = false)
         }
 
@@ -61,4 +61,3 @@ private fun looksLikeKeyContent(text: String): Boolean {
     if (text.contains("BEGIN OPENSSH PRIVATE KEY")) return true
     return false
 }
-

@@ -158,7 +158,8 @@ fun HomeScreen(
                     val connectionsByGroup = remember(uiState.connections, knownGroupIds) {
                         uiState.connections
                             .filter { it.groupId != null && it.groupId in knownGroupIds }
-                            .groupBy { it.groupId!! }
+                            // Safe because of the filter above; avoid `!!` for better readability and tooling support.
+                            .groupBy { requireNotNull(it.groupId) { "groupId was null after filtering" } }
                     }
 
                     LazyColumn(

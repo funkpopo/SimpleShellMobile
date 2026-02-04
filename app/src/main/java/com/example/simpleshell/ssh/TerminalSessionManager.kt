@@ -151,11 +151,9 @@ class TerminalSshSession internal constructor(
                         val materialized = materializePrivateKey(context, rawKey)
                         tempKeyFile = if (materialized.isTemp) materialized.file else null
 
-                        val keyProvider = if (connection.privateKeyPassphrase != null) {
-                            loadKeys(materialized.file.absolutePath, connection.privateKeyPassphrase)
-                        } else {
-                            loadKeys(materialized.file.absolutePath, null as String?)
-                        }
+                        val keyProvider = connection.privateKeyPassphrase?.let { passphrase ->
+                            loadKeys(materialized.file.absolutePath, passphrase)
+                        } ?: loadKeys(materialized.file.absolutePath)
                         authPublickey(connection.username, keyProvider)
                     }
                 }
@@ -238,8 +236,13 @@ class TerminalSshSession internal constructor(
     fun sendCommand(command: String) {
         scope.launch {
             try {
-                synchronized(stateLock) { outputWriter }?.println(command)
-                synchronized(stateLock) { outputWriter }?.flush()
+                // Keep the write+flush atomic with respect to disconnect() replacing/closing the writer.
+                synchronized(stateLock) {
+                    outputWriter?.apply {
+                        println(command)
+                        flush()
+                    }
+                }
             } catch (_: Exception) {
                 // Ignore send errors
             }
@@ -249,13 +252,26 @@ class TerminalSshSession internal constructor(
     fun sendInput(input: String) {
         scope.launch {
             try {
-                synchronized(stateLock) { outputWriter }?.print(input)
-                synchronized(stateLock) { outputWriter }?.flush()
+                synchronized(stateLock) {
+                    outputWriter?.apply {
+                        print(input)
+                        flush()
+                    }
+                }
             } catch (_: Exception) {
                 // Ignore send errors
             }
         }
     }
+
+    private data class DisconnectSnapshot(
+        val writer: PrintWriter?,
+        val reader: BufferedReader?,
+        val shell: Session.Shell?,
+        val session: Session?,
+        val client: SSHClient?,
+        val tempKeyFile: File?
+    )
 
     fun disconnect() {
         val wasConnected = _isConnected.value
@@ -267,7 +283,14 @@ class TerminalSshSession internal constructor(
         readJob = null
 
         val toClose = synchronized(stateLock) {
-            val snapshot = arrayOf(outputWriter, inputReader, shell, session, client, tempKeyFile)
+            val snapshot = DisconnectSnapshot(
+                writer = outputWriter,
+                reader = inputReader,
+                shell = shell,
+                session = session,
+                client = client,
+                tempKeyFile = tempKeyFile
+            )
             outputWriter = null
             inputReader = null
             shell = null
@@ -277,37 +300,22 @@ class TerminalSshSession internal constructor(
             snapshot
         }
 
-        try {
-            (toClose[0] as? PrintWriter)?.close()
-        } catch (_: Exception) {
-        }
-        try {
-            (toClose[1] as? BufferedReader)?.close()
-        } catch (_: Exception) {
-        }
-        try {
-            (toClose[2] as? Session.Shell)?.close()
-        } catch (_: Exception) {
-        }
-        try {
-            (toClose[3] as? Session)?.close()
-        } catch (_: Exception) {
-        }
-        try {
-            val c = (toClose[4] as? SSHClient)
-            if (c != null) {
+        runCatching { toClose.writer?.close() }
+        runCatching { toClose.reader?.close() }
+        runCatching { toClose.shell?.close() }
+        runCatching { toClose.session?.close() }
+        runCatching {
+            toClose.client?.let { c ->
                 try {
-                    c.disconnect()
+                    if (c.isConnected) {
+                        c.disconnect()
+                    }
                 } finally {
                     c.close()
                 }
             }
-        } catch (_: Exception) {
         }
-        try {
-            (toClose[5] as? File)?.delete()
-        } catch (_: Exception) {
-        }
+        runCatching { toClose.tempKeyFile?.delete() }
 
         if (wasConnected) {
             onDisconnected(connectionId)

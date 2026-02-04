@@ -47,6 +47,16 @@ android {
             excludes += "/META-INF/DEPENDENCIES"
         }
     }
+
+    lint {
+        // Keep lint focused on correctness for the current codebase.
+        // Dependency/version update signals are better handled by Renovate/Dependabot or a manual bump pass.
+        disable += "GradleDependency"
+        disable += "NewerVersionAvailable"
+        disable += "OldTargetApi"
+        // Triggered by sshj's transitive BouncyCastle dependency; not directly actionable in this app code.
+        disable += "TrustAllX509TrustManager"
+    }
 }
 
 dependencies {

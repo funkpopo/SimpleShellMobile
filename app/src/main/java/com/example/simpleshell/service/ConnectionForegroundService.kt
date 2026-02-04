@@ -6,7 +6,6 @@ import android.app.PendingIntent
 import android.app.Service
 import android.content.Context
 import android.content.Intent
-import android.os.Build
 import android.os.IBinder
 import androidx.core.app.NotificationCompat
 import com.example.simpleshell.MainActivity
@@ -328,8 +327,6 @@ class ConnectionForegroundService : Service() {
     }
 
     private fun ensureChannel() {
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return
-
         val mgr = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
         val existing = mgr.getNotificationChannel(CHANNEL_ID)
         if (existing != null) return

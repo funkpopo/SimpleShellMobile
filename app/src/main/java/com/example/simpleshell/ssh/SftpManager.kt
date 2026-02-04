@@ -44,11 +44,9 @@ class SftpManager @Inject constructor(
                         val materialized = materializePrivateKey(context, rawKey)
                         tempKeyFile = if (materialized.isTemp) materialized.file else null
 
-                        val keyProvider = if (connection.privateKeyPassphrase != null) {
-                            loadKeys(materialized.file.absolutePath, connection.privateKeyPassphrase)
-                        } else {
-                            loadKeys(materialized.file.absolutePath, null as String?)
-                        }
+                        val keyProvider = connection.privateKeyPassphrase?.let { passphrase ->
+                            loadKeys(materialized.file.absolutePath, passphrase)
+                        } ?: loadKeys(materialized.file.absolutePath)
                         authPublickey(connection.username, keyProvider)
                     }
                 }
@@ -101,17 +99,29 @@ class SftpManager @Inject constructor(
 
     fun disconnect() {
         _isConnected.value = false
-        try {
-            sftpClient?.close()
-            client?.disconnect()
-        } catch (e: Exception) {
-            // Ignore disconnect errors
-        } finally {
-            sftpClient = null
-            client = null
-            tempKeyFile?.delete()
-            tempKeyFile = null
+
+        val sftp = sftpClient
+        val ssh = client
+        val keyFile = tempKeyFile
+
+        sftpClient = null
+        client = null
+        tempKeyFile = null
+
+        // Don't let disconnect/close failures prevent the rest of the cleanup from happening.
+        runCatching { sftp?.close() }
+        runCatching {
+            ssh?.let { c ->
+                try {
+                    if (c.isConnected) {
+                        c.disconnect()
+                    }
+                } finally {
+                    c.close()
+                }
+            }
         }
+        runCatching { keyFile?.delete() }
     }
 
     val isConnected: Boolean
