@@ -1,5 +1,10 @@
 package com.example.simpleshell.ui.screens.terminal
 
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
@@ -22,8 +27,13 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.Placeholder
+import androidx.compose.ui.text.PlaceholderVerticalAlign
+import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.foundation.text.InlineTextContent
+import androidx.compose.foundation.text.appendInlineContent
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
@@ -36,10 +46,25 @@ fun TerminalScreen(
     viewModel: TerminalViewModel = hiltViewModel()
 ) {
     val uiState by viewModel.uiState.collectAsState()
-    var inputText by remember { mutableStateOf("") }
+    // 用于捕获键盘输入的缓冲区
+    var inputBuffer by remember { mutableStateOf("") }
+    var lastSentLength by remember { mutableIntStateOf(0) }
+    var isResetting by remember { mutableStateOf(false) }
     val scrollState = rememberScrollState()
     val focusRequester = remember { FocusRequester() }
     val keyboardController = LocalSoftwareKeyboardController.current
+
+    // 闪烁光标动画
+    val infiniteTransition = rememberInfiniteTransition(label = "cursor")
+    val cursorAlpha by infiniteTransition.animateFloat(
+        initialValue = 1f,
+        targetValue = 0f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(500),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "cursorAlpha"
+    )
 
     LaunchedEffect(uiState.output) {
         scrollState.animateScrollTo(scrollState.maxValue)
@@ -139,46 +164,103 @@ fun TerminalScreen(
                                 .verticalScroll(scrollState)
                                 .padding(8.dp)
                         ) {
-                            val styledText = remember(uiState.output) {
-                                if (uiState.output.isEmpty()) {
-                                    AnsiParser.parse("Waiting for output...", Color(0xFFAAAAAA))
-                                } else {
-                                    AnsiParser.parse(uiState.output, Color(0xFFE5E5E5))
+                            // 终端输出文本，末尾带闪烁光标
+                            val textWithCursor = remember(uiState.output) {
+                                buildAnnotatedString {
+                                    val parsed = if (uiState.output.isEmpty()) {
+                                        AnsiParser.parse("Waiting for output...", Color(0xFFAAAAAA))
+                                    } else {
+                                        AnsiParser.parse(uiState.output, Color(0xFFE5E5E5))
+                                    }
+                                    append(parsed)
+                                    appendInlineContent("cursor", "[█]")
                                 }
                             }
-                            Text(
-                                text = styledText,
-                                fontFamily = FontFamily.Monospace,
-                                fontSize = 14.sp,
-                                lineHeight = 18.sp
+
+                            val cursorInlineContent = mapOf(
+                                "cursor" to InlineTextContent(
+                                    Placeholder(
+                                        width = 10.sp,
+                                        height = 16.sp,
+                                        placeholderVerticalAlign = PlaceholderVerticalAlign.TextCenter
+                                    )
+                                ) {
+                                    Box(
+                                        modifier = Modifier
+                                            .width(10.dp)
+                                            .height(16.dp)
+                                            .background(Color(0xFF4CAF50).copy(alpha = cursorAlpha))
+                                    )
+                                }
                             )
 
-                            // Inline input field at the end of terminal output
+                            Text(
+                                text = textWithCursor,
+                                fontFamily = FontFamily.Monospace,
+                                fontSize = 14.sp,
+                                lineHeight = 18.sp,
+                                inlineContent = cursorInlineContent
+                            )
+
+                            // 隐藏的输入框，用于捕获键盘输入并实时发送到终端
                             BasicTextField(
-                                value = inputText,
-                                onValueChange = { inputText = it },
+                                value = inputBuffer,
+                                onValueChange = { newValue ->
+                                    if (isResetting) {
+                                        inputBuffer = newValue
+                                        if (newValue.isEmpty()) {
+                                            isResetting = false
+                                            lastSentLength = 0
+                                        }
+                                        return@BasicTextField
+                                    }
+
+                                    when {
+                                        newValue.length > lastSentLength -> {
+                                            // 用户输入了新字符，发送到终端
+                                            val newChars = newValue.substring(lastSentLength)
+                                            viewModel.sendInput(newChars)
+                                            lastSentLength = newValue.length
+                                        }
+                                        newValue.length < lastSentLength -> {
+                                            // 用户删除了字符，发送退格
+                                            val deletedCount = lastSentLength - newValue.length
+                                            repeat(deletedCount) {
+                                                viewModel.sendInput("\u007F") // DEL字符
+                                            }
+                                            lastSentLength = newValue.length
+                                        }
+                                    }
+                                    inputBuffer = newValue
+                                },
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .focusRequester(focusRequester),
+                                    .focusRequester(focusRequester)
+                                    .height(1.dp), // 最小高度，几乎不可见
                                 textStyle = TextStyle(
-                                    color = Color(0xFF4CAF50),
+                                    color = Color.Transparent, // 文字透明
                                     fontFamily = FontFamily.Monospace,
-                                    fontSize = 14.sp
+                                    fontSize = 1.sp
                                 ),
-                                cursorBrush = SolidColor(Color(0xFF4CAF50)),
+                                cursorBrush = SolidColor(Color.Transparent), // 光标透明
                                 keyboardOptions = KeyboardOptions(imeAction = ImeAction.Send),
                                 keyboardActions = KeyboardActions(
                                     onSend = {
-                                        if (inputText.isNotEmpty()) {
-                                            viewModel.sendCommand(inputText)
-                                            inputText = ""
-                                        }
+                                        viewModel.sendInput("\n") // 发送换行
+                                        isResetting = true
+                                        inputBuffer = ""
+                                        lastSentLength = 0
                                     }
                                 ),
                                 singleLine = true
                             )
                         }
                     }
+
+                    // Shortcut panel at the bottom
+                    ShortcutPanel(
+                        onSendInput = { input -> viewModel.sendInput(input) }
+                    )
                 }
             }
         }
