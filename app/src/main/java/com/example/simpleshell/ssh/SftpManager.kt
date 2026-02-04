@@ -5,9 +5,9 @@ import com.example.simpleshell.domain.model.SftpFile
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import net.schmizz.sshj.SSHClient
+import net.schmizz.sshj.sftp.FileMode
 import net.schmizz.sshj.sftp.SFTPClient
 import net.schmizz.sshj.transport.verification.PromiscuousVerifier
-import java.io.File
 import javax.inject.Inject
 
 class SftpManager @Inject constructor() {
@@ -89,18 +89,19 @@ class SftpManager @Inject constructor() {
     val isConnected: Boolean
         get() = client?.isConnected == true
 
-    private fun formatPermissions(mode: Int): String {
+    private fun formatPermissions(mode: FileMode): String {
+        val mask = mode.mask
         val perms = StringBuilder()
-        perms.append(if ((mode and 0x4000) != 0) 'd' else '-')
-        perms.append(if ((mode and 0x100) != 0) 'r' else '-')
-        perms.append(if ((mode and 0x80) != 0) 'w' else '-')
-        perms.append(if ((mode and 0x40) != 0) 'x' else '-')
-        perms.append(if ((mode and 0x20) != 0) 'r' else '-')
-        perms.append(if ((mode and 0x10) != 0) 'w' else '-')
-        perms.append(if ((mode and 0x8) != 0) 'x' else '-')
-        perms.append(if ((mode and 0x4) != 0) 'r' else '-')
-        perms.append(if ((mode and 0x2) != 0) 'w' else '-')
-        perms.append(if ((mode and 0x1) != 0) 'x' else '-')
+        perms.append(if ((mask and 0x4000) != 0) 'd' else '-')
+        perms.append(if ((mask and 0x100) != 0) 'r' else '-')
+        perms.append(if ((mask and 0x80) != 0) 'w' else '-')
+        perms.append(if ((mask and 0x40) != 0) 'x' else '-')
+        perms.append(if ((mask and 0x20) != 0) 'r' else '-')
+        perms.append(if ((mask and 0x10) != 0) 'w' else '-')
+        perms.append(if ((mask and 0x8) != 0) 'x' else '-')
+        perms.append(if ((mask and 0x4) != 0) 'r' else '-')
+        perms.append(if ((mask and 0x2) != 0) 'w' else '-')
+        perms.append(if ((mask and 0x1) != 0) 'x' else '-')
         return perms.toString()
     }
 }
