@@ -12,7 +12,8 @@ import androidx.core.app.NotificationCompat
 import com.example.simpleshell.MainActivity
 import com.example.simpleshell.R
 import com.example.simpleshell.ssh.SftpManager
-import com.example.simpleshell.ssh.TerminalSession
+import com.example.simpleshell.ssh.TerminalConnectionSummary
+import com.example.simpleshell.ssh.TerminalSessionManager
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -27,10 +28,14 @@ import javax.inject.Inject
 @AndroidEntryPoint
 class ConnectionForegroundService : Service() {
 
-    @Inject lateinit var terminalSession: TerminalSession
+    @Inject lateinit var terminalSessionManager: TerminalSessionManager
     @Inject lateinit var sftpManager: SftpManager
 
     private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
+    private var foregroundStarted = false
+
+    private var shownTerminalNotificationIds: Set<Long> = emptySet()
+    private var shownSftpNotification: Boolean = false
 
     override fun onBind(intent: Intent?): IBinder? = null
 
@@ -38,18 +43,21 @@ class ConnectionForegroundService : Service() {
         super.onCreate()
         ensureChannel()
 
-        // If all connections are closed, stop the service automatically so we don't leave a stale
-        // notification around (and so we don't accidentally disconnect on configuration changes).
         serviceScope.launch {
             combine(
-                terminalSession.isConnected,
+                terminalSessionManager.connectedSessions,
                 sftpManager.isConnectedFlow
-            ) { terminalConnected, sftpConnected ->
-                terminalConnected || sftpConnected
+            ) { terminalSessions, sftpConnected ->
+                ConnectionsSnapshot(
+                    terminalSessions = terminalSessions.values.sortedBy { it.connectionId },
+                    sftpConnected = sftpConnected
+                )
             }
                 .distinctUntilChanged()
-                .collect { anyConnected ->
-                    if (!anyConnected) {
+                .collect { snapshot ->
+                    updateNotifications(snapshot)
+
+                    if (snapshot.terminalSessions.isEmpty() && !snapshot.sftpConnected) {
                         stopForeground(STOP_FOREGROUND_REMOVE)
                         stopSelf()
                     }
@@ -59,28 +67,48 @@ class ConnectionForegroundService : Service() {
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         when (intent?.action) {
-            ACTION_DISCONNECT -> {
-                // Disconnect may involve blocking I/O. Do it off the main thread, then stop.
+            ACTION_DISCONNECT_ALL -> {
+                // Disconnect may involve blocking I/O. Do it off the main thread.
                 serviceScope.launch {
                     withContext(Dispatchers.IO) {
                         disconnectAll()
                     }
-                    stopForeground(STOP_FOREGROUND_REMOVE)
-                    stopSelf()
+                }
+                return START_NOT_STICKY
+            }
+            ACTION_DISCONNECT_TERMINAL -> {
+                val connectionId = intent.getLongExtra(EXTRA_CONNECTION_ID, -1L)
+                if (connectionId > 0) {
+                    serviceScope.launch {
+                        withContext(Dispatchers.IO) {
+                            terminalSessionManager.disconnect(connectionId)
+                        }
+                    }
+                }
+                return START_NOT_STICKY
+            }
+            ACTION_DISCONNECT_SFTP -> {
+                serviceScope.launch {
+                    withContext(Dispatchers.IO) {
+                        sftpManager.disconnect()
+                    }
                 }
                 return START_NOT_STICKY
             }
             else -> {
-                val title = intent?.getStringExtra(EXTRA_TITLE) ?: "SSH Connected"
-                val subtitle = intent?.getStringExtra(EXTRA_SUBTITLE)
-
-                val notification = buildNotification(
-                    title = title,
-                    subtitle = subtitle
+                // Keep process alive while any connection is active.
+                val snapshot = ConnectionsSnapshot(
+                    terminalSessions = terminalSessionManager.connectedSessions.value.values
+                        .sortedBy { it.connectionId },
+                    sftpConnected = sftpManager.isConnectedFlow.value
                 )
 
-                // Keep process alive while a connection is active.
-                startForeground(NOTIFICATION_ID, notification)
+                val notification = buildSummaryNotification(snapshot)
+                startForeground(NOTIFICATION_ID_SUMMARY, notification)
+                foregroundStarted = true
+
+                // Also publish child notifications immediately (grouped).
+                updateNotifications(snapshot)
                 return START_NOT_STICKY
             }
         }
@@ -104,7 +132,7 @@ class ConnectionForegroundService : Service() {
 
     private fun disconnectAll() {
         try {
-            terminalSession.disconnect()
+            terminalSessionManager.disconnectAll()
         } catch (_: Exception) {
         }
         try {
@@ -113,7 +141,44 @@ class ConnectionForegroundService : Service() {
         }
     }
 
-    private fun buildNotification(title: String, subtitle: String?): android.app.Notification {
+    private fun updateNotifications(snapshot: ConnectionsSnapshot) {
+        val mgr = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+
+        // Foreground summary notification
+        val summary = buildSummaryNotification(snapshot)
+        if (foregroundStarted) {
+            mgr.notify(NOTIFICATION_ID_SUMMARY, summary)
+        }
+
+        // Child notifications for each terminal connection (so each has its own Disconnect action).
+        val connectedTerminalIds = snapshot.terminalSessions.map { it.connectionId }.toSet()
+        val removedIds = shownTerminalNotificationIds - connectedTerminalIds
+        val addedOrStillIds = connectedTerminalIds
+
+        removedIds.forEach { id ->
+            mgr.cancel(terminalNotificationId(id))
+        }
+        snapshot.terminalSessions.forEach { terminal ->
+            if (terminal.connectionId in addedOrStillIds) {
+                mgr.notify(
+                    terminalNotificationId(terminal.connectionId),
+                    buildTerminalNotification(terminal)
+                )
+            }
+        }
+        shownTerminalNotificationIds = connectedTerminalIds
+
+        // Optional: show SFTP status as a single notification (still manageable independently).
+        if (snapshot.sftpConnected) {
+            mgr.notify(NOTIFICATION_ID_SFTP, buildSftpNotification())
+            shownSftpNotification = true
+        } else if (shownSftpNotification) {
+            mgr.cancel(NOTIFICATION_ID_SFTP)
+            shownSftpNotification = false
+        }
+    }
+
+    private fun buildSummaryNotification(snapshot: ConnectionsSnapshot): android.app.Notification {
         val openIntent = Intent(this, MainActivity::class.java).apply {
             addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP)
         }
@@ -124,34 +189,142 @@ class ConnectionForegroundService : Service() {
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
         )
 
-        val disconnectIntent = Intent(this, ConnectionForegroundService::class.java).apply {
-            action = ACTION_DISCONNECT
+        val disconnectAllIntent = Intent(this, ConnectionForegroundService::class.java).apply {
+            action = ACTION_DISCONNECT_ALL
         }
-        val disconnectPendingIntent = PendingIntent.getService(
+        val disconnectAllPendingIntent = PendingIntent.getService(
             this,
             1,
-            disconnectIntent,
+            disconnectAllIntent,
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
         )
 
+        val terminalCount = snapshot.terminalSessions.size
+        val totalCount = terminalCount + if (snapshot.sftpConnected) 1 else 0
+        val contentText = when {
+            totalCount <= 0 -> "No active connections"
+            totalCount == 1 && terminalCount == 1 -> "1 Terminal connection active"
+            totalCount == 1 && snapshot.sftpConnected -> "1 SFTP connection active"
+            else -> "$totalCount connections active"
+        }
+
+        val inbox = NotificationCompat.InboxStyle()
+        snapshot.terminalSessions.take(5).forEach { terminal ->
+            inbox.addLine("Terminal: ${terminal.connectionName}")
+        }
+        if (snapshot.sftpConnected) {
+            inbox.addLine("SFTP: connected")
+        }
+        if (snapshot.terminalSessions.size > 5) {
+            inbox.addLine("...and ${snapshot.terminalSessions.size - 5} more")
+        }
+
         val builder = NotificationCompat.Builder(this, CHANNEL_ID)
             .setSmallIcon(R.drawable.ic_launcher_foreground)
-            .setContentTitle(title)
+            .setContentTitle("SimpleShell")
+            .setContentText(contentText)
             .setContentIntent(openPendingIntent)
             .setOngoing(true)
             .setOnlyAlertOnce(true)
             .setCategory(NotificationCompat.CATEGORY_SERVICE)
+            .setGroup(GROUP_KEY_CONNECTIONS)
+            .setGroupSummary(true)
+            .setStyle(inbox)
+            .addAction(
+                R.drawable.ic_launcher_foreground,
+                "Disconnect all",
+                disconnectAllPendingIntent
+            )
+
+        return builder.build()
+    }
+
+    private fun buildTerminalNotification(terminal: TerminalConnectionSummary): android.app.Notification {
+        val openIntent = Intent(this, MainActivity::class.java).apply {
+            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP)
+        }
+        val openPendingIntent = PendingIntent.getActivity(
+            this,
+            terminal.connectionId.hashCode(),
+            openIntent,
+            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
+        )
+
+        val disconnectIntent = Intent(this, ConnectionForegroundService::class.java).apply {
+            action = ACTION_DISCONNECT_TERMINAL
+            putExtra(EXTRA_CONNECTION_ID, terminal.connectionId)
+        }
+        val disconnectPendingIntent = PendingIntent.getService(
+            this,
+            ("terminal_disconnect_" + terminal.connectionId).hashCode(),
+            disconnectIntent,
+            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
+        )
+
+        return NotificationCompat.Builder(this, CHANNEL_ID)
+            .setSmallIcon(R.drawable.ic_launcher_foreground)
+            .setContentTitle(terminal.connectionName)
+            .setContentText("Terminal 已连接")
+            .setContentIntent(openPendingIntent)
+            .setOngoing(true)
+            .setOnlyAlertOnce(true)
+            .setCategory(NotificationCompat.CATEGORY_SERVICE)
+            .setGroup(GROUP_KEY_CONNECTIONS)
+            .addAction(
+                R.drawable.ic_launcher_foreground,
+                "断开连接",
+                disconnectPendingIntent
+            )
+            .build()
+    }
+
+    private fun buildSftpNotification(): android.app.Notification {
+        val openIntent = Intent(this, MainActivity::class.java).apply {
+            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP)
+        }
+        val openPendingIntent = PendingIntent.getActivity(
+            this,
+            3,
+            openIntent,
+            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
+        )
+
+        val disconnectIntent = Intent(this, ConnectionForegroundService::class.java).apply {
+            action = ACTION_DISCONNECT_SFTP
+        }
+        val disconnectPendingIntent = PendingIntent.getService(
+            this,
+            4,
+            disconnectIntent,
+            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
+        )
+
+        return NotificationCompat.Builder(this, CHANNEL_ID)
+            .setSmallIcon(R.drawable.ic_launcher_foreground)
+            .setContentTitle("SFTP")
+            .setContentText("SFTP 已连接")
+            .setContentIntent(openPendingIntent)
+            .setOngoing(true)
+            .setOnlyAlertOnce(true)
+            .setCategory(NotificationCompat.CATEGORY_SERVICE)
+            .setGroup(GROUP_KEY_CONNECTIONS)
             .addAction(
                 R.drawable.ic_launcher_foreground,
                 "Disconnect",
                 disconnectPendingIntent
             )
+            .build()
+    }
 
-        if (!subtitle.isNullOrBlank()) {
-            builder.setContentText(subtitle)
-        }
+    private data class ConnectionsSnapshot(
+        val terminalSessions: List<TerminalConnectionSummary>,
+        val sftpConnected: Boolean
+    )
 
-        return builder.build()
+    private fun terminalNotificationId(connectionId: Long): Int {
+        val hash = (connectionId xor (connectionId ushr 32)).toInt()
+        // Keep ids in a reasonable range and away from summary/sftp ids.
+        return TERMINAL_NOTIFICATION_ID_BASE + ((hash and 0x7FFFFFFF) % 1_000_000)
     }
 
     private fun ensureChannel() {
@@ -173,12 +346,19 @@ class ConnectionForegroundService : Service() {
     }
 
     companion object {
-        const val ACTION_DISCONNECT = "com.example.simpleshell.action.DISCONNECT"
+        const val ACTION_DISCONNECT_ALL = "com.example.simpleshell.action.DISCONNECT_ALL"
+        const val ACTION_DISCONNECT_TERMINAL = "com.example.simpleshell.action.DISCONNECT_TERMINAL"
+        const val ACTION_DISCONNECT_SFTP = "com.example.simpleshell.action.DISCONNECT_SFTP"
+
+        const val EXTRA_CONNECTION_ID = "extra_connection_id"
 
         const val EXTRA_TITLE = "extra_title"
         const val EXTRA_SUBTITLE = "extra_subtitle"
 
         private const val CHANNEL_ID = "connection_status"
-        private const val NOTIFICATION_ID = 1001
+        private const val GROUP_KEY_CONNECTIONS = "connections"
+        private const val NOTIFICATION_ID_SUMMARY = 1001
+        private const val NOTIFICATION_ID_SFTP = 1002
+        private const val TERMINAL_NOTIFICATION_ID_BASE = 2000
     }
 }

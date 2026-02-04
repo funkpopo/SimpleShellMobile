@@ -52,10 +52,6 @@ fun SftpScreen(
         ContextCompat.startForegroundService(context, intent)
     }
 
-    fun stopConnectionService() {
-        context.stopService(Intent(context, ConnectionForegroundService::class.java))
-    }
-
     val notificationPermissionLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.RequestPermission()
     ) { granted ->
@@ -83,8 +79,6 @@ fun SftpScreen(
                     notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
                 }
             }
-        } else {
-            stopConnectionService()
         }
     }
 

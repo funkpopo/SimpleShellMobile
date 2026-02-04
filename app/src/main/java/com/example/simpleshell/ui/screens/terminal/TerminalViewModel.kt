@@ -5,22 +5,25 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.simpleshell.data.repository.ConnectionRepository
 import com.example.simpleshell.domain.model.Connection
-import com.example.simpleshell.ssh.TerminalSession
+import com.example.simpleshell.ssh.TerminalSessionManager
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import javax.inject.Inject
 
 @HiltViewModel
 class TerminalViewModel @Inject constructor(
     private val connectionRepository: ConnectionRepository,
-    private val terminalSession: TerminalSession,
+    private val terminalSessionManager: TerminalSessionManager,
     savedStateHandle: SavedStateHandle
 ) : ViewModel() {
 
     private val connectionId: Long = savedStateHandle.get<Long>("connectionId") ?: -1
+    private val session = terminalSessionManager.getSession(connectionId)
 
     private val _uiState = MutableStateFlow(TerminalUiState())
     val uiState: StateFlow<TerminalUiState> = _uiState.asStateFlow()
@@ -32,12 +35,12 @@ class TerminalViewModel @Inject constructor(
 
     private fun observeTerminalOutput() {
         viewModelScope.launch {
-            terminalSession.outputFlow.collect { output ->
+            session.outputFlow.collect { output ->
                 _uiState.value = _uiState.value.copy(output = output)
             }
         }
         viewModelScope.launch {
-            terminalSession.isConnected.collect { isConnected ->
+            session.isConnected.collect { isConnected ->
                 _uiState.value = _uiState.value.copy(
                     isConnected = isConnected,
                     isConnecting = if (isConnected) false else _uiState.value.isConnecting
@@ -45,12 +48,12 @@ class TerminalViewModel @Inject constructor(
             }
         }
         viewModelScope.launch {
-            terminalSession.sessionId.collect { sessionId ->
+            session.sessionId.collect { sessionId ->
                 _uiState.value = _uiState.value.copy(sessionId = sessionId)
             }
         }
         viewModelScope.launch {
-            terminalSession.connectedAtMs.collect { connectedAtMs ->
+            session.connectedAtMs.collect { connectedAtMs ->
                 _uiState.value = _uiState.value.copy(connectedAtMs = connectedAtMs)
             }
         }
@@ -84,8 +87,10 @@ class TerminalViewModel @Inject constructor(
                         Connection.AuthType.KEY else Connection.AuthType.PASSWORD
                 )
 
-                terminalSession.connect(connection)
-                connectionRepository.updateLastConnectedAt(connectionId)
+                val didConnect = terminalSessionManager.connectIfNeeded(connection)
+                if (didConnect) {
+                    connectionRepository.updateLastConnectedAt(connectionId)
+                }
 
                 _uiState.value = _uiState.value.copy(isConnecting = false)
             } catch (e: Exception) {
@@ -98,21 +103,21 @@ class TerminalViewModel @Inject constructor(
     }
 
     fun sendCommand(command: String) {
-        terminalSession.sendCommand(command)
+        session.sendCommand(command)
     }
 
     fun sendInput(input: String) {
-        terminalSession.sendInput(input)
+        session.sendInput(input)
     }
 
     fun reconnect() {
-        terminalSession.disconnect()
-        terminalSession.clearOutput()
-        connect()
-    }
-
-    override fun onCleared() {
-        super.onCleared()
-        terminalSession.disconnect()
+        // Disconnect may block; do it on IO to avoid ANR.
+        viewModelScope.launch {
+            withContext(Dispatchers.IO) {
+                session.disconnect()
+            }
+            session.clearOutput()
+            connect()
+        }
     }
 }

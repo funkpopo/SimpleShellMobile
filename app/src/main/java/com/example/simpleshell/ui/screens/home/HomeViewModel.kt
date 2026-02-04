@@ -6,7 +6,9 @@ import com.example.simpleshell.data.local.database.entity.ConnectionEntity
 import com.example.simpleshell.data.local.database.entity.GroupEntity
 import com.example.simpleshell.data.repository.ConnectionRepository
 import com.example.simpleshell.data.repository.GroupRepository
+import com.example.simpleshell.ssh.TerminalSessionManager
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -18,7 +20,8 @@ import javax.inject.Inject
 @HiltViewModel
 class HomeViewModel @Inject constructor(
     private val connectionRepository: ConnectionRepository,
-    private val groupRepository: GroupRepository
+    private val groupRepository: GroupRepository,
+    private val terminalSessionManager: TerminalSessionManager
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(HomeUiState())
@@ -33,9 +36,10 @@ class HomeViewModel @Inject constructor(
             _uiState.value = _uiState.value.copy(isLoading = true)
             combine(
                 groupRepository.getAllGroups(),
-                connectionRepository.getAllConnections()
-            ) { groups, connections ->
-                groups to connections
+                connectionRepository.getAllConnections(),
+                terminalSessionManager.connectedSessions
+            ) { groups, connections, connectedSessions ->
+                Triple(groups, connections, connectedSessions.keys)
             }
                 .catch { e ->
                     _uiState.value = _uiState.value.copy(
@@ -43,14 +47,22 @@ class HomeViewModel @Inject constructor(
                         error = e.message
                     )
                 }
-                .collect { (groups, connections) ->
+                .collect { (groups, connections, connectedIds) ->
                     _uiState.value = _uiState.value.copy(
                         groups = groups,
                         connections = connections,
+                        connectedTerminalConnectionIds = connectedIds,
                         isLoading = false,
                         error = null
                     )
                 }
+        }
+    }
+
+    fun disconnectTerminal(connectionId: Long) {
+        // Disconnect can block on network I/O / socket close; never do it on the main thread.
+        viewModelScope.launch(Dispatchers.IO) {
+            terminalSessionManager.disconnect(connectionId)
         }
     }
 

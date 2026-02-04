@@ -1,15 +1,18 @@
 package com.example.simpleshell.ui.screens.home
 
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.CreateNewFolder
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Folder
+import androidx.compose.material.icons.filled.LinkOff
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Terminal
@@ -17,6 +20,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -175,6 +179,8 @@ fun HomeScreen(
                             items(ungroupedConnections, key = { "conn_${it.id}" }) { connection ->
                                 ConnectionRow(
                                     connection = connection,
+                                    isTerminalConnected = connection.id in uiState.connectedTerminalConnectionIds,
+                                    onDisconnectTerminal = { viewModel.disconnectTerminal(connection.id) },
                                     onEdit = { onEditConnection(connection.id) },
                                     onDelete = { viewModel.deleteConnection(connection) },
                                     onTerminal = { onConnectTerminal(connection.id) },
@@ -209,6 +215,8 @@ fun HomeScreen(
                                 items(groupConnections, key = { "conn_${it.id}" }) { connection ->
                                     ConnectionRow(
                                         connection = connection,
+                                        isTerminalConnected = connection.id in uiState.connectedTerminalConnectionIds,
+                                        onDisconnectTerminal = { viewModel.disconnectTerminal(connection.id) },
                                         onEdit = { onEditConnection(connection.id) },
                                         onDelete = { viewModel.deleteConnection(connection) },
                                         onTerminal = { onConnectTerminal(connection.id) },
@@ -231,6 +239,8 @@ fun HomeScreen(
 @Composable
 private fun ConnectionRow(
     connection: ConnectionEntity,
+    isTerminalConnected: Boolean,
+    onDisconnectTerminal: () -> Unit,
     onEdit: () -> Unit,
     onDelete: () -> Unit,
     onTerminal: () -> Unit,
@@ -267,6 +277,14 @@ private fun ConnectionRow(
         elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
     ) {
         ListItem(
+            leadingContent = {
+                val dotColor = if (isTerminalConnected) Color(0xFF4CAF50) else MaterialTheme.colorScheme.outlineVariant
+                Box(
+                    modifier = Modifier
+                        .size(10.dp)
+                        .background(dotColor, CircleShape)
+                )
+            },
             headlineContent = {
                 Text(
                     text = connection.name,
@@ -299,6 +317,18 @@ private fun ConnectionRow(
                             expanded = menuExpanded,
                             onDismissRequest = { menuExpanded = false }
                         ) {
+                            if (isTerminalConnected) {
+                                DropdownMenuItem(
+                                    text = { Text("断开连接") },
+                                    onClick = {
+                                        menuExpanded = false
+                                        onDisconnectTerminal()
+                                    },
+                                    leadingIcon = {
+                                        Icon(Icons.Default.LinkOff, contentDescription = null)
+                                    }
+                                )
+                            }
                             DropdownMenuItem(
                                 text = { Text("编辑") },
                                 onClick = {

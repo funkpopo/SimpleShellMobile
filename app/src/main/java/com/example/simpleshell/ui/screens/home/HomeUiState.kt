@@ -6,6 +6,7 @@ import com.example.simpleshell.data.local.database.entity.GroupEntity
 data class HomeUiState(
     val groups: List<GroupEntity> = emptyList(),
     val connections: List<ConnectionEntity> = emptyList(),
+    val connectedTerminalConnectionIds: Set<Long> = emptySet(),
     val isLoading: Boolean = false,
     val error: String? = null
 )
