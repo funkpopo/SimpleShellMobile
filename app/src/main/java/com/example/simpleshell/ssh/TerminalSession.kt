@@ -1,10 +1,12 @@
 package com.example.simpleshell.ssh
 
 import com.example.simpleshell.domain.model.Connection
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import net.schmizz.sshj.SSHClient
 import net.schmizz.sshj.connection.channel.direct.Session
@@ -21,6 +23,8 @@ class TerminalSession @Inject constructor() {
     private var shell: Session.Shell? = null
     private var outputWriter: PrintWriter? = null
     private var inputReader: BufferedReader? = null
+
+    private val scope = CoroutineScope(Dispatchers.IO)
 
     private val _outputFlow = MutableStateFlow("")
     val outputFlow: StateFlow<String> = _outputFlow.asStateFlow()
@@ -90,13 +94,25 @@ class TerminalSession @Inject constructor() {
     }
 
     fun sendCommand(command: String) {
-        outputWriter?.println(command)
-        outputWriter?.flush()
+        scope.launch {
+            try {
+                outputWriter?.println(command)
+                outputWriter?.flush()
+            } catch (e: Exception) {
+                // Ignore send errors
+            }
+        }
     }
 
     fun sendInput(input: String) {
-        outputWriter?.print(input)
-        outputWriter?.flush()
+        scope.launch {
+            try {
+                outputWriter?.print(input)
+                outputWriter?.flush()
+            } catch (e: Exception) {
+                // Ignore send errors
+            }
+        }
     }
 
     fun disconnect() {

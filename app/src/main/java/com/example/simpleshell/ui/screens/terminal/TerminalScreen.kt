@@ -1,6 +1,8 @@
 package com.example.simpleshell.ui.screens.terminal
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.BasicTextField
@@ -9,14 +11,16 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.input.ImeAction
@@ -34,6 +38,8 @@ fun TerminalScreen(
     val uiState by viewModel.uiState.collectAsState()
     var inputText by remember { mutableStateOf("") }
     val scrollState = rememberScrollState()
+    val focusRequester = remember { FocusRequester() }
+    val keyboardController = LocalSoftwareKeyboardController.current
 
     LaunchedEffect(uiState.output) {
         scrollState.animateScrollTo(scrollState.maxValue)
@@ -114,88 +120,65 @@ fun TerminalScreen(
                     }
                 }
                 else -> {
+                    // Terminal area with integrated input
                     Box(
                         modifier = Modifier
                             .weight(1f)
                             .fillMaxWidth()
-                            .verticalScroll(scrollState)
-                            .padding(8.dp)
+                            .clickable(
+                                interactionSource = remember { MutableInteractionSource() },
+                                indication = null
+                            ) {
+                                focusRequester.requestFocus()
+                                keyboardController?.show()
+                            }
                     ) {
-                        val styledText = remember(uiState.output) {
-                            if (uiState.output.isEmpty()) {
-                                AnsiParser.parse("Waiting for output...", Color(0xFFAAAAAA))
-                            } else {
-                                AnsiParser.parse(uiState.output, Color(0xFFE5E5E5))
+                        Column(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .verticalScroll(scrollState)
+                                .padding(8.dp)
+                        ) {
+                            val styledText = remember(uiState.output) {
+                                if (uiState.output.isEmpty()) {
+                                    AnsiParser.parse("Waiting for output...", Color(0xFFAAAAAA))
+                                } else {
+                                    AnsiParser.parse(uiState.output, Color(0xFFE5E5E5))
+                                }
                             }
-                        }
-                        Text(
-                            text = styledText,
-                            fontFamily = FontFamily.Monospace,
-                            fontSize = 14.sp,
-                            lineHeight = 18.sp
-                        )
-                    }
-                }
-            }
+                            Text(
+                                text = styledText,
+                                fontFamily = FontFamily.Monospace,
+                                fontSize = 14.sp,
+                                lineHeight = 18.sp
+                            )
 
-            // Input area
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .background(Color(0xFF2D2D2D))
-                    .padding(8.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                BasicTextField(
-                    value = inputText,
-                    onValueChange = { inputText = it },
-                    modifier = Modifier
-                        .weight(1f)
-                        .padding(horizontal = 12.dp, vertical = 8.dp),
-                    textStyle = TextStyle(
-                        color = Color.White,
-                        fontFamily = FontFamily.Monospace,
-                        fontSize = 14.sp
-                    ),
-                    cursorBrush = SolidColor(Color.White),
-                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Send),
-                    keyboardActions = KeyboardActions(
-                        onSend = {
-                            if (inputText.isNotEmpty()) {
-                                viewModel.sendCommand(inputText)
-                                inputText = ""
-                            }
-                        }
-                    ),
-                    decorationBox = { innerTextField ->
-                        Box {
-                            if (inputText.isEmpty()) {
-                                Text(
-                                    "Enter command...",
-                                    color = Color.Gray,
+                            // Inline input field at the end of terminal output
+                            BasicTextField(
+                                value = inputText,
+                                onValueChange = { inputText = it },
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .focusRequester(focusRequester),
+                                textStyle = TextStyle(
+                                    color = Color(0xFF4CAF50),
                                     fontFamily = FontFamily.Monospace,
                                     fontSize = 14.sp
-                                )
-                            }
-                            innerTextField()
+                                ),
+                                cursorBrush = SolidColor(Color(0xFF4CAF50)),
+                                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Send),
+                                keyboardActions = KeyboardActions(
+                                    onSend = {
+                                        if (inputText.isNotEmpty()) {
+                                            viewModel.sendCommand(inputText)
+                                            inputText = ""
+                                        }
+                                    }
+                                ),
+                                singleLine = true
+                            )
                         }
                     }
-                )
-                IconButton(
-                    onClick = {
-                        if (inputText.isNotEmpty()) {
-                            viewModel.sendCommand(inputText)
-                            inputText = ""
-                        }
-                    },
-                    enabled = uiState.isConnected && inputText.isNotEmpty()
-                ) {
-                    Icon(
-                        Icons.AutoMirrored.Filled.Send,
-                        contentDescription = "Send",
-                        tint = if (uiState.isConnected && inputText.isNotEmpty())
-                            Color(0xFF4CAF50) else Color.Gray
-                    )
                 }
             }
         }
