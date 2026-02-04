@@ -8,6 +8,7 @@ import androidx.navigation.compose.composable
 import androidx.navigation.navArgument
 import com.example.simpleshell.ui.screens.connection.ConnectionEditScreen
 import com.example.simpleshell.ui.screens.home.HomeScreen
+import com.example.simpleshell.ui.screens.settings.SettingsScreen
 import com.example.simpleshell.ui.screens.sftp.SftpScreen
 import com.example.simpleshell.ui.screens.terminal.TerminalScreen
 
@@ -22,6 +23,9 @@ fun NavGraph(navController: NavHostController) {
                 onAddConnection = {
                     navController.navigate(Screen.ConnectionEdit.createRoute(null))
                 },
+                onOpenSettings = {
+                    navController.navigate(Screen.Settings.route)
+                },
                 onEditConnection = { connectionId ->
                     navController.navigate(Screen.ConnectionEdit.createRoute(connectionId))
                 },
@@ -31,6 +35,12 @@ fun NavGraph(navController: NavHostController) {
                 onConnectSftp = { connectionId ->
                     navController.navigate(Screen.Sftp.createRoute(connectionId))
                 }
+            )
+        }
+
+        composable(Screen.Settings.route) {
+            SettingsScreen(
+                onNavigateBack = { navController.popBackStack() }
             )
         }
 

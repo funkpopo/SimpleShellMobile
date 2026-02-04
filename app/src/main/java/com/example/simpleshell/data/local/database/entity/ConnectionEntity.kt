@@ -8,6 +8,7 @@ data class ConnectionEntity(
     @PrimaryKey(autoGenerate = true)
     val id: Long = 0,
     val name: String,
+    val groupId: Long? = null,
     val host: String,
     val port: Int = 22,
     val username: String,

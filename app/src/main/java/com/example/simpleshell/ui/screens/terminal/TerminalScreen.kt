@@ -1,5 +1,11 @@
 package com.example.simpleshell.ui.screens.terminal
 
+import android.Manifest
+import android.content.Intent
+import android.content.pm.PackageManager
+import android.os.Build
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.infiniteRepeatable
@@ -10,6 +16,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
@@ -25,6 +32,7 @@ import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.Placeholder
@@ -36,7 +44,9 @@ import androidx.compose.foundation.text.InlineTextContent
 import androidx.compose.foundation.text.appendInlineContent
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.core.content.ContextCompat
 import androidx.hilt.navigation.compose.hiltViewModel
+import com.example.simpleshell.service.ConnectionForegroundService
 import com.example.simpleshell.ui.util.AnsiParser
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -53,6 +63,55 @@ fun TerminalScreen(
     val scrollState = rememberScrollState()
     val focusRequester = remember { FocusRequester() }
     val keyboardController = LocalSoftwareKeyboardController.current
+    val context = LocalContext.current
+    var askedNotificationPermission by remember { mutableStateOf(false) }
+
+    fun startConnectionService() {
+        val intent = Intent(context, ConnectionForegroundService::class.java).apply {
+            putExtra(
+                ConnectionForegroundService.EXTRA_TITLE,
+                uiState.connectionName.ifEmpty { "Terminal" }
+            )
+            putExtra(ConnectionForegroundService.EXTRA_SUBTITLE, "Terminal 已连接")
+        }
+        ContextCompat.startForegroundService(context, intent)
+    }
+
+    fun stopConnectionService() {
+        context.stopService(Intent(context, ConnectionForegroundService::class.java))
+    }
+
+    val notificationPermissionLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestPermission()
+    ) { granted ->
+        if (granted && uiState.isConnected) {
+            startConnectionService()
+        }
+    }
+
+    LaunchedEffect(uiState.isConnected, uiState.connectionName) {
+        if (uiState.isConnected) {
+            val hasNotificationPermission = if (Build.VERSION.SDK_INT >= 33) {
+                ContextCompat.checkSelfPermission(
+                    context,
+                    Manifest.permission.POST_NOTIFICATIONS
+                ) == PackageManager.PERMISSION_GRANTED
+            } else {
+                true
+            }
+
+            if (hasNotificationPermission) {
+                startConnectionService()
+            } else {
+                if (!askedNotificationPermission) {
+                    askedNotificationPermission = true
+                    notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+                }
+            }
+        } else {
+            stopConnectionService()
+        }
+    }
 
     // 闪烁光标动画
     val infiniteTransition = rememberInfiniteTransition(label = "cursor")
@@ -74,13 +133,17 @@ fun TerminalScreen(
         topBar = {
             TopAppBar(
                 title = {
-                    Column {
-                        Text(uiState.connectionName.ifEmpty { "Terminal" })
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(
+                            uiState.connectionName.ifEmpty { "Terminal" },
+                            maxLines = 1
+                        )
                         if (uiState.isConnected) {
-                            Text(
-                                "Connected",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = Color(0xFF4CAF50)
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Box(
+                                modifier = Modifier
+                                    .size(8.dp)
+                                    .background(Color(0xFF4CAF50), CircleShape)
                             )
                         }
                     }
@@ -96,7 +159,7 @@ fun TerminalScreen(
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = Color(0xFF1E1E1E),
+                    containerColor = Color.Black,
                     titleContentColor = Color.White,
                     navigationIconContentColor = Color.White,
                     actionIconContentColor = Color.White
@@ -108,7 +171,7 @@ fun TerminalScreen(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(paddingValues)
-                .background(Color(0xFF1E1E1E))
+                .background(Color.Black)
         ) {
             when {
                 uiState.isConnecting -> {
@@ -162,7 +225,7 @@ fun TerminalScreen(
                             modifier = Modifier
                                 .fillMaxSize()
                                 .verticalScroll(scrollState)
-                                .padding(8.dp)
+                                .padding(6.dp)
                         ) {
                             // 终端输出文本，末尾带闪烁光标
                             val textWithCursor = remember(uiState.output) {

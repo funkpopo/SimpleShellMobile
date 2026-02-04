@@ -1,5 +1,7 @@
 package com.example.simpleshell.ui.screens.connection
 
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardOptions
@@ -11,11 +13,13 @@ import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.compose.ui.platform.LocalFocusManager
 import com.example.simpleshell.domain.model.Connection
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -26,6 +30,29 @@ fun ConnectionEditScreen(
 ) {
     val uiState by viewModel.uiState.collectAsState()
     var passwordVisible by remember { mutableStateOf(false) }
+    var groupMenuExpanded by remember { mutableStateOf(false) }
+    val focusManager = LocalFocusManager.current
+    val context = LocalContext.current
+
+    val keyFilePicker = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.OpenDocument()
+    ) { uri ->
+        if (uri != null) {
+            try {
+                val keyText = context.contentResolver.openInputStream(uri)?.use { input ->
+                    input.readBytes().toString(Charsets.UTF_8)
+                }
+                if (!keyText.isNullOrBlank()) {
+                    viewModel.updatePrivateKey(keyText)
+                    viewModel.setError(null)
+                } else {
+                    viewModel.setError("Key file is empty")
+                }
+            } catch (e: Exception) {
+                viewModel.setError("Failed to read key file: ${e.message}")
+            }
+        }
+    }
 
     LaunchedEffect(uiState.isSaved) {
         if (uiState.isSaved) {
@@ -71,6 +98,50 @@ fun ConnectionEditScreen(
                 modifier = Modifier.fillMaxWidth(),
                 singleLine = true
             )
+
+            ExposedDropdownMenuBox(
+                expanded = groupMenuExpanded,
+                onExpandedChange = { groupMenuExpanded = !groupMenuExpanded }
+            ) {
+                val currentGroupName = uiState.groups.firstOrNull { it.id == uiState.groupId }?.name ?: "未分组"
+
+                OutlinedTextField(
+                    value = currentGroupName,
+                    onValueChange = {},
+                    readOnly = true,
+                    label = { Text("分组") },
+                    modifier = Modifier
+                        .menuAnchor(MenuAnchorType.PrimaryNotEditable)
+                        .fillMaxWidth(),
+                    trailingIcon = {
+                        ExposedDropdownMenuDefaults.TrailingIcon(expanded = groupMenuExpanded)
+                    }
+                )
+
+                ExposedDropdownMenu(
+                    expanded = groupMenuExpanded,
+                    onDismissRequest = { groupMenuExpanded = false }
+                ) {
+                    DropdownMenuItem(
+                        text = { Text("未分组") },
+                        onClick = {
+                            focusManager.clearFocus()
+                            viewModel.updateGroupId(null)
+                            groupMenuExpanded = false
+                        }
+                    )
+                    uiState.groups.forEach { group ->
+                        DropdownMenuItem(
+                            text = { Text(group.name) },
+                            onClick = {
+                                focusManager.clearFocus()
+                                viewModel.updateGroupId(group.id)
+                                groupMenuExpanded = false
+                            }
+                        )
+                    }
+                }
+            }
 
             OutlinedTextField(
                 value = uiState.host,
@@ -148,6 +219,13 @@ fun ConnectionEditScreen(
                         .height(150.dp),
                     placeholder = { Text("-----BEGIN RSA PRIVATE KEY-----\n...\n-----END RSA PRIVATE KEY-----") }
                 )
+
+                OutlinedButton(
+                    onClick = { keyFilePicker.launch(arrayOf("*/*")) },
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text("从本地文件导入 Key")
+                }
 
                 OutlinedTextField(
                     value = uiState.privateKeyPassphrase,

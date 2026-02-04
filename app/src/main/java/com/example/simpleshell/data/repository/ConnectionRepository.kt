@@ -33,4 +33,8 @@ class ConnectionRepository @Inject constructor(
     suspend fun updateLastConnectedAt(id: Long) {
         connectionDao.updateLastConnectedAt(id, System.currentTimeMillis())
     }
+
+    suspend fun clearGroupForConnections(groupId: Long) {
+        connectionDao.clearGroupForConnections(groupId)
+    }
 }

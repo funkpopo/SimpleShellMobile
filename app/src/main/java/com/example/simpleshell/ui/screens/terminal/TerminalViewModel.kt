@@ -16,6 +16,7 @@ import javax.inject.Inject
 @HiltViewModel
 class TerminalViewModel @Inject constructor(
     private val connectionRepository: ConnectionRepository,
+    private val terminalSession: TerminalSession,
     savedStateHandle: SavedStateHandle
 ) : ViewModel() {
 
@@ -23,8 +24,6 @@ class TerminalViewModel @Inject constructor(
 
     private val _uiState = MutableStateFlow(TerminalUiState())
     val uiState: StateFlow<TerminalUiState> = _uiState.asStateFlow()
-
-    private val terminalSession = TerminalSession()
 
     init {
         observeTerminalOutput()

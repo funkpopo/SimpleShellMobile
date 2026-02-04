@@ -1,6 +1,8 @@
 package com.example.simpleshell.ssh
 
+import android.content.Context
 import com.example.simpleshell.domain.model.Connection
+import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -12,17 +14,23 @@ import net.schmizz.sshj.SSHClient
 import net.schmizz.sshj.connection.channel.direct.Session
 import net.schmizz.sshj.transport.verification.PromiscuousVerifier
 import java.io.BufferedReader
+import java.io.File
 import java.io.InputStreamReader
 import java.io.OutputStreamWriter
 import java.io.PrintWriter
 import javax.inject.Inject
+import javax.inject.Singleton
 
-class TerminalSession @Inject constructor() {
+@Singleton
+class TerminalSession @Inject constructor(
+    @ApplicationContext private val context: Context
+) {
     private var client: SSHClient? = null
     private var session: Session? = null
     private var shell: Session.Shell? = null
     private var outputWriter: PrintWriter? = null
     private var inputReader: BufferedReader? = null
+    private var tempKeyFile: File? = null
 
     private val scope = CoroutineScope(Dispatchers.IO)
 
@@ -35,6 +43,8 @@ class TerminalSession @Inject constructor() {
     private val outputBuffer = StringBuilder()
 
     suspend fun connect(connection: Connection) = withContext(Dispatchers.IO) {
+        // Single shared session: ensure we don't leak resources if connect() is called repeatedly.
+        disconnect()
         try {
             client = SSHClient().apply {
                 addHostKeyVerifier(PromiscuousVerifier())
@@ -45,10 +55,14 @@ class TerminalSession @Inject constructor() {
                         authPassword(connection.username, connection.password ?: "")
                     }
                     Connection.AuthType.KEY -> {
+                        val rawKey = connection.privateKey ?: ""
+                        val materialized = materializePrivateKey(context, rawKey)
+                        tempKeyFile = if (materialized.isTemp) materialized.file else null
+
                         val keyProvider = if (connection.privateKeyPassphrase != null) {
-                            loadKeys(connection.privateKey, connection.privateKeyPassphrase)
+                            loadKeys(materialized.file.absolutePath, connection.privateKeyPassphrase)
                         } else {
-                            loadKeys(connection.privateKey, null as String?)
+                            loadKeys(materialized.file.absolutePath, null as String?)
                         }
                         authPublickey(connection.username, keyProvider)
                     }
@@ -67,7 +81,7 @@ class TerminalSession @Inject constructor() {
             _isConnected.value = true
             startReadingOutput()
         } catch (e: Exception) {
-            _isConnected.value = false
+            disconnect()
             throw e
         }
     }
@@ -129,6 +143,8 @@ class TerminalSession @Inject constructor() {
             client = null
             outputWriter = null
             inputReader = null
+            tempKeyFile?.delete()
+            tempKeyFile = null
         }
     }
 

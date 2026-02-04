@@ -17,6 +17,7 @@ import javax.inject.Inject
 @HiltViewModel
 class SftpViewModel @Inject constructor(
     private val connectionRepository: ConnectionRepository,
+    private val sftpManager: SftpManager,
     savedStateHandle: SavedStateHandle
 ) : ViewModel() {
 
@@ -24,12 +25,22 @@ class SftpViewModel @Inject constructor(
 
     private val _uiState = MutableStateFlow(SftpUiState())
     val uiState: StateFlow<SftpUiState> = _uiState.asStateFlow()
-
-    private val sftpManager = SftpManager()
     private val pathHistory = mutableListOf<String>()
 
     init {
+        observeConnectionState()
         connect()
+    }
+
+    private fun observeConnectionState() {
+        viewModelScope.launch {
+            sftpManager.isConnectedFlow.collect { isConnected ->
+                _uiState.value = _uiState.value.copy(
+                    isConnected = isConnected,
+                    isConnecting = if (isConnected) false else _uiState.value.isConnecting
+                )
+            }
+        }
     }
 
     private fun connect() {
@@ -63,10 +74,10 @@ class SftpViewModel @Inject constructor(
                 sftpManager.connect(connection)
                 connectionRepository.updateLastConnectedAt(connectionId)
 
-                val homePath = sftpManager.getHomeDirectory()
+                // Default to filesystem root instead of "~/" or "/root" for a more predictable UX.
+                val homePath = "/"
                 _uiState.value = _uiState.value.copy(
                     isConnecting = false,
-                    isConnected = true,
                     currentPath = homePath
                 )
                 pathHistory.add(homePath)

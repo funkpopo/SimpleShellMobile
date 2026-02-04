@@ -1,20 +1,30 @@
 package com.example.simpleshell.ui.screens.sftp
 
+import android.Manifest
+import android.content.Intent
+import android.content.pm.PackageManager
+import android.os.Build
+import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.BackHandler
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.InsertDriveFile
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.core.content.ContextCompat
 import androidx.hilt.navigation.compose.hiltViewModel
+import com.example.simpleshell.service.ConnectionForegroundService
 import com.example.simpleshell.domain.model.SftpFile
 import java.text.SimpleDateFormat
 import java.util.*
@@ -28,6 +38,55 @@ fun SftpScreen(
     val uiState by viewModel.uiState.collectAsState()
     var showNewFolderDialog by remember { mutableStateOf(false) }
     var showDeleteDialog by remember { mutableStateOf<SftpFile?>(null) }
+    val context = LocalContext.current
+    var askedNotificationPermission by remember { mutableStateOf(false) }
+
+    fun startConnectionService() {
+        val intent = Intent(context, ConnectionForegroundService::class.java).apply {
+            putExtra(
+                ConnectionForegroundService.EXTRA_TITLE,
+                uiState.connectionName.ifEmpty { "SFTP" }
+            )
+            putExtra(ConnectionForegroundService.EXTRA_SUBTITLE, "SFTP 已连接")
+        }
+        ContextCompat.startForegroundService(context, intent)
+    }
+
+    fun stopConnectionService() {
+        context.stopService(Intent(context, ConnectionForegroundService::class.java))
+    }
+
+    val notificationPermissionLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestPermission()
+    ) { granted ->
+        if (granted && uiState.isConnected) {
+            startConnectionService()
+        }
+    }
+
+    LaunchedEffect(uiState.isConnected, uiState.connectionName) {
+        if (uiState.isConnected) {
+            val hasNotificationPermission = if (Build.VERSION.SDK_INT >= 33) {
+                ContextCompat.checkSelfPermission(
+                    context,
+                    Manifest.permission.POST_NOTIFICATIONS
+                ) == PackageManager.PERMISSION_GRANTED
+            } else {
+                true
+            }
+
+            if (hasNotificationPermission) {
+                startConnectionService()
+            } else {
+                if (!askedNotificationPermission) {
+                    askedNotificationPermission = true
+                    notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+                }
+            }
+        } else {
+            stopConnectionService()
+        }
+    }
 
     BackHandler(enabled = uiState.isConnected) {
         if (!viewModel.navigateUp()) {
@@ -70,15 +129,11 @@ fun SftpScreen(
         topBar = {
             TopAppBar(
                 title = {
-                    Column {
-                        Text(uiState.connectionName.ifEmpty { "SFTP" })
-                        Text(
-                            uiState.currentPath,
-                            style = MaterialTheme.typography.bodySmall,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis
-                        )
-                    }
+                    Text(
+                        uiState.connectionName.ifEmpty { "SFTP" },
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
                 },
                 navigationIcon = {
                     IconButton(onClick = {
@@ -138,15 +193,31 @@ fun SftpScreen(
                     if (uiState.isLoading) {
                         LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
                     }
-                    LazyColumn(
-                        modifier = Modifier.fillMaxSize()
-                    ) {
-                        items(uiState.files, key = { it.path }) { file ->
-                            FileListItem(
-                                file = file,
-                                onClick = { viewModel.navigateTo(file) },
-                                onDelete = { showDeleteDialog = file }
-                            )
+                    Column(modifier = Modifier.fillMaxSize()) {
+                        if (uiState.isConnected) {
+                            Surface(
+                                color = MaterialTheme.colorScheme.surfaceVariant,
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Text(
+                                    text = uiState.currentPath,
+                                    style = MaterialTheme.typography.bodySmall,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
+                                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
+                                )
+                            }
+                        }
+                        LazyColumn(
+                            modifier = Modifier.fillMaxSize()
+                        ) {
+                            items(uiState.files, key = { it.path }) { file ->
+                                FileListItem(
+                                    file = file,
+                                    onClick = { viewModel.navigateTo(file) },
+                                    onDelete = { showDeleteDialog = file }
+                                )
+                            }
                         }
                     }
                 }
@@ -165,7 +236,7 @@ private fun FileListItem(
         modifier = Modifier.clickable(onClick = onClick),
         leadingContent = {
             Icon(
-                if (file.isDirectory) Icons.Default.Folder else Icons.Default.InsertDriveFile,
+                if (file.isDirectory) Icons.Default.Folder else Icons.AutoMirrored.Filled.InsertDriveFile,
                 contentDescription = null,
                 tint = if (file.isDirectory)
                     MaterialTheme.colorScheme.primary

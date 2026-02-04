@@ -1,39 +1,64 @@
 package com.example.simpleshell.ssh
 
+import android.content.Context
 import com.example.simpleshell.domain.model.Connection
 import com.example.simpleshell.domain.model.SftpFile
+import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.withContext
 import net.schmizz.sshj.SSHClient
 import net.schmizz.sshj.sftp.FileMode
 import net.schmizz.sshj.sftp.SFTPClient
 import net.schmizz.sshj.transport.verification.PromiscuousVerifier
+import java.io.File
 import javax.inject.Inject
+import javax.inject.Singleton
 
-class SftpManager @Inject constructor() {
+@Singleton
+class SftpManager @Inject constructor(
+    @ApplicationContext private val context: Context
+) {
     private var client: SSHClient? = null
     private var sftpClient: SFTPClient? = null
+    private var tempKeyFile: File? = null
+
+    private val _isConnected = MutableStateFlow(false)
+    val isConnectedFlow: StateFlow<Boolean> = _isConnected.asStateFlow()
 
     suspend fun connect(connection: Connection) = withContext(Dispatchers.IO) {
-        client = SSHClient().apply {
-            addHostKeyVerifier(PromiscuousVerifier())
-            connect(connection.host, connection.port)
+        try {
+            disconnect()
+            client = SSHClient().apply {
+                addHostKeyVerifier(PromiscuousVerifier())
+                connect(connection.host, connection.port)
 
-            when (connection.authType) {
-                Connection.AuthType.PASSWORD -> {
-                    authPassword(connection.username, connection.password ?: "")
-                }
-                Connection.AuthType.KEY -> {
-                    val keyProvider = if (connection.privateKeyPassphrase != null) {
-                        loadKeys(connection.privateKey, connection.privateKeyPassphrase)
-                    } else {
-                        loadKeys(connection.privateKey, null as String?)
+                when (connection.authType) {
+                    Connection.AuthType.PASSWORD -> {
+                        authPassword(connection.username, connection.password ?: "")
                     }
-                    authPublickey(connection.username, keyProvider)
+                    Connection.AuthType.KEY -> {
+                        val rawKey = connection.privateKey ?: ""
+                        val materialized = materializePrivateKey(context, rawKey)
+                        tempKeyFile = if (materialized.isTemp) materialized.file else null
+
+                        val keyProvider = if (connection.privateKeyPassphrase != null) {
+                            loadKeys(materialized.file.absolutePath, connection.privateKeyPassphrase)
+                        } else {
+                            loadKeys(materialized.file.absolutePath, null as String?)
+                        }
+                        authPublickey(connection.username, keyProvider)
+                    }
                 }
             }
+            sftpClient = client?.newSFTPClient()
+            _isConnected.value = true
+        } catch (e: Exception) {
+            _isConnected.value = false
+            throw e
         }
-        sftpClient = client?.newSFTPClient()
     }
 
     suspend fun listFiles(path: String): List<SftpFile> = withContext(Dispatchers.IO) {
@@ -75,6 +100,7 @@ class SftpManager @Inject constructor() {
     }
 
     fun disconnect() {
+        _isConnected.value = false
         try {
             sftpClient?.close()
             client?.disconnect()
@@ -83,6 +109,8 @@ class SftpManager @Inject constructor() {
         } finally {
             sftpClient = null
             client = null
+            tempKeyFile?.delete()
+            tempKeyFile = null
         }
     }
 

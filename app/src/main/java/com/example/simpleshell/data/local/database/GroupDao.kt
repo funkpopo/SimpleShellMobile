@@ -1,0 +1,32 @@
+package com.example.simpleshell.data.local.database
+
+import androidx.room.Dao
+import androidx.room.Delete
+import androidx.room.Insert
+import androidx.room.OnConflictStrategy
+import androidx.room.Query
+import androidx.room.Update
+import com.example.simpleshell.data.local.database.entity.GroupEntity
+import kotlinx.coroutines.flow.Flow
+
+@Dao
+interface GroupDao {
+    @Query("SELECT * FROM groups ORDER BY name COLLATE NOCASE ASC, createdAt ASC")
+    fun getAllGroups(): Flow<List<GroupEntity>>
+
+    @Insert(onConflict = OnConflictStrategy.ABORT)
+    suspend fun insertGroup(group: GroupEntity): Long
+
+    @Update
+    suspend fun updateGroup(group: GroupEntity)
+
+    @Delete
+    suspend fun deleteGroup(group: GroupEntity)
+
+    @Query("SELECT * FROM groups WHERE id = :id")
+    suspend fun getGroupById(id: Long): GroupEntity?
+
+    @Query("SELECT COUNT(*) FROM groups WHERE name = :name")
+    suspend fun countByName(name: String): Int
+}
+

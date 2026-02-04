@@ -1,9 +1,12 @@
 package com.example.simpleshell.ui.screens.connection
 
+import com.example.simpleshell.data.local.database.entity.GroupEntity
 import com.example.simpleshell.domain.model.Connection
 
 data class ConnectionEditUiState(
     val name: String = "",
+    val groupId: Long? = null,
+    val groups: List<GroupEntity> = emptyList(),
     val host: String = "",
     val port: String = "22",
     val username: String = "",

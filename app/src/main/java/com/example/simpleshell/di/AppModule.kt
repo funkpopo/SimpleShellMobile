@@ -4,6 +4,8 @@ import android.content.Context
 import androidx.room.Room
 import com.example.simpleshell.data.local.database.AppDatabase
 import com.example.simpleshell.data.local.database.ConnectionDao
+import com.example.simpleshell.data.local.database.GroupDao
+import com.example.simpleshell.data.local.database.Migrations
 import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn
@@ -22,12 +24,20 @@ object AppModule {
             context,
             AppDatabase::class.java,
             "simpleshell_database"
-        ).build()
+        )
+            .addMigrations(Migrations.MIGRATION_1_2)
+            .build()
     }
 
     @Provides
     @Singleton
     fun provideConnectionDao(database: AppDatabase): ConnectionDao {
         return database.connectionDao()
+    }
+
+    @Provides
+    @Singleton
+    fun provideGroupDao(database: AppDatabase): GroupDao {
+        return database.groupDao()
     }
 }

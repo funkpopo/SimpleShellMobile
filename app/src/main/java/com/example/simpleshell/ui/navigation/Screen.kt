@@ -2,6 +2,7 @@ package com.example.simpleshell.ui.navigation
 
 sealed class Screen(val route: String) {
     object Home : Screen("home")
+    object Settings : Screen("settings")
     object ConnectionEdit : Screen("connection_edit/{connectionId}") {
         fun createRoute(connectionId: Long? = null) = "connection_edit/${connectionId ?: -1}"
     }

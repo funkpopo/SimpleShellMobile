@@ -5,17 +5,20 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.simpleshell.data.local.database.entity.ConnectionEntity
 import com.example.simpleshell.data.repository.ConnectionRepository
+import com.example.simpleshell.data.repository.GroupRepository
 import com.example.simpleshell.domain.model.Connection
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
 @HiltViewModel
 class ConnectionEditViewModel @Inject constructor(
     private val connectionRepository: ConnectionRepository,
+    private val groupRepository: GroupRepository,
     savedStateHandle: SavedStateHandle
 ) : ViewModel() {
 
@@ -25,8 +28,21 @@ class ConnectionEditViewModel @Inject constructor(
     val uiState: StateFlow<ConnectionEditUiState> = _uiState.asStateFlow()
 
     init {
+        observeGroups()
         if (connectionId > 0) {
             loadConnection()
+        }
+    }
+
+    private fun observeGroups() {
+        viewModelScope.launch {
+            groupRepository.getAllGroups()
+                .catch {
+                    _uiState.value = _uiState.value.copy(groups = emptyList())
+                }
+                .collect { groups ->
+                    _uiState.value = _uiState.value.copy(groups = groups)
+                }
         }
     }
 
@@ -38,6 +54,7 @@ class ConnectionEditViewModel @Inject constructor(
                 if (connection != null) {
                     _uiState.value = _uiState.value.copy(
                         name = connection.name,
+                        groupId = connection.groupId,
                         host = connection.host,
                         port = connection.port.toString(),
                         username = connection.username,
@@ -65,6 +82,10 @@ class ConnectionEditViewModel @Inject constructor(
 
     fun updateHost(host: String) {
         _uiState.value = _uiState.value.copy(host = host)
+    }
+
+    fun updateGroupId(groupId: Long?) {
+        _uiState.value = _uiState.value.copy(groupId = groupId)
     }
 
     fun updatePort(port: String) {
@@ -97,6 +118,10 @@ class ConnectionEditViewModel @Inject constructor(
             _uiState.value = state.copy(error = "Please fill in all required fields")
             return
         }
+        if (state.authType == Connection.AuthType.KEY && state.privateKey.isBlank()) {
+            _uiState.value = state.copy(error = "Please provide a private key")
+            return
+        }
 
         viewModelScope.launch {
             _uiState.value = _uiState.value.copy(isLoading = true)
@@ -104,6 +129,7 @@ class ConnectionEditViewModel @Inject constructor(
                 val entity = ConnectionEntity(
                     id = if (connectionId > 0) connectionId else 0,
                     name = state.name,
+                    groupId = state.groupId,
                     host = state.host,
                     port = state.port.toIntOrNull() ?: 22,
                     username = state.username,
@@ -137,5 +163,9 @@ class ConnectionEditViewModel @Inject constructor(
 
     fun clearError() {
         _uiState.value = _uiState.value.copy(error = null)
+    }
+
+    fun setError(message: String?) {
+        _uiState.value = _uiState.value.copy(error = message)
     }
 }

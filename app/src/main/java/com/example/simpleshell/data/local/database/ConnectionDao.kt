@@ -23,4 +23,7 @@ interface ConnectionDao {
 
     @Query("UPDATE connections SET lastConnectedAt = :timestamp WHERE id = :id")
     suspend fun updateLastConnectedAt(id: Long, timestamp: Long)
+
+    @Query("UPDATE connections SET groupId = NULL WHERE groupId = :groupId")
+    suspend fun clearGroupForConnections(groupId: Long)
 }
