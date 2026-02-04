@@ -5,7 +5,6 @@ import androidx.room.Room
 import com.example.simpleshell.data.local.database.AppDatabase
 import com.example.simpleshell.data.local.database.ConnectionDao
 import com.example.simpleshell.data.local.database.GroupDao
-import com.example.simpleshell.data.local.database.Migrations
 import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn
@@ -25,7 +24,9 @@ object AppModule {
             AppDatabase::class.java,
             "simpleshell_database"
         )
-            .addMigrations(Migrations.MIGRATION_1_2)
+            // Early-stage app: prefer a clean rebuild over maintaining migrations.
+            // NOTE: This will wipe existing data on schema changes.
+            .fallbackToDestructiveMigration()
             .build()
     }
 
