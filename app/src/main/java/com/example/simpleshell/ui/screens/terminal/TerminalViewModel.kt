@@ -39,7 +39,10 @@ class TerminalViewModel @Inject constructor(
         }
         viewModelScope.launch {
             terminalSession.isConnected.collect { isConnected ->
-                _uiState.value = _uiState.value.copy(isConnected = isConnected)
+                _uiState.value = _uiState.value.copy(
+                    isConnected = isConnected,
+                    isConnecting = if (isConnected) false else _uiState.value.isConnecting
+                )
             }
         }
     }
