@@ -23,6 +23,7 @@ import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
+import com.example.simpleshell.ui.util.AnsiParser
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -120,9 +121,15 @@ fun TerminalScreen(
                             .verticalScroll(scrollState)
                             .padding(8.dp)
                     ) {
+                        val styledText = remember(uiState.output) {
+                            if (uiState.output.isEmpty()) {
+                                AnsiParser.parse("Waiting for output...", Color(0xFFAAAAAA))
+                            } else {
+                                AnsiParser.parse(uiState.output, Color(0xFFE5E5E5))
+                            }
+                        }
                         Text(
-                            text = uiState.output.ifEmpty { "Waiting for output..." },
-                            color = Color(0xFF00FF00),
+                            text = styledText,
                             fontFamily = FontFamily.Monospace,
                             fontSize = 14.sp,
                             lineHeight = 18.sp

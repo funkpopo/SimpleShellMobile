@@ -30,9 +30,6 @@ class TerminalSession @Inject constructor() {
 
     private val outputBuffer = StringBuilder()
 
-    // Regex to match ANSI escape sequences
-    private val ansiEscapeRegex = Regex("\u001B\\[[0-9;?]*[a-zA-Z]|\u001B\\][^\u0007]*\u0007|\u001B[()][AB012]")
-
     suspend fun connect(connection: Connection) = withContext(Dispatchers.IO) {
         try {
             client = SSHClient().apply {
@@ -78,8 +75,7 @@ class TerminalSession @Inject constructor() {
                 val read = inputReader?.read(buffer) ?: -1
                 if (read > 0) {
                     val text = String(buffer, 0, read)
-                    val cleanText = stripAnsiCodes(text)
-                    outputBuffer.append(cleanText)
+                    outputBuffer.append(text)
                     _outputFlow.value = outputBuffer.toString()
                 } else if (read == -1) {
                     break
@@ -91,10 +87,6 @@ class TerminalSession @Inject constructor() {
                 _outputFlow.value = outputBuffer.toString()
             }
         }
-    }
-
-    private fun stripAnsiCodes(text: String): String {
-        return ansiEscapeRegex.replace(text, "")
     }
 
     fun sendCommand(command: String) {
