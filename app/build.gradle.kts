@@ -80,6 +80,8 @@ dependencies {
 
     // SSH
     implementation(libs.sshj)
+    // sshj pulls this in as runtimeOnly, but we reference it directly to swap out Android's built-in "BC".
+    implementation(libs.bouncycastle.bcprov)
 
     // ViewModel
     implementation(libs.androidx.lifecycle.viewmodel.compose)
