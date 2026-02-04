@@ -1,5 +1,8 @@
 package com.example.simpleshell.ui.screens.settings
 
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -14,7 +17,11 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.filled.KeyboardArrowDown
+import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material.icons.filled.Palette
+import androidx.compose.material.icons.filled.Person
+import androidx.compose.material.icons.outlined.Code
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
@@ -35,6 +42,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.collectAsState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
@@ -49,6 +57,8 @@ fun SettingsScreen(
 ) {
     val uiState by viewModel.uiState.collectAsState()
     var showThemeDialog by remember { mutableStateOf(false) }
+    var aboutExpanded by remember { mutableStateOf(false) }
+    val uriHandler = LocalUriHandler.current
 
     if (showThemeDialog) {
         ThemeModeDialog(
@@ -139,8 +149,43 @@ fun SettingsScreen(
                     supportingContent = {
                         Text("版本 ${BuildConfig.VERSION_NAME} (${BuildConfig.VERSION_CODE})")
                     },
-                    leadingContent = { Icon(Icons.Default.Info, contentDescription = null) }
+                    leadingContent = { Icon(Icons.Default.Info, contentDescription = null) },
+                    trailingContent = {
+                        Icon(
+                            imageVector = if (aboutExpanded) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
+                            contentDescription = if (aboutExpanded) "收起" else "展开"
+                        )
+                    },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable { aboutExpanded = !aboutExpanded }
                 )
+            }
+
+            item {
+                AnimatedVisibility(
+                    visible = aboutExpanded,
+                    enter = expandVertically(),
+                    exit = shrinkVertically()
+                ) {
+                    Column {
+                        ListItem(
+                            headlineContent = { Text("作者") },
+                            supportingContent = { Text("Funkpopo") },
+                            leadingContent = { Icon(Icons.Default.Person, contentDescription = null) }
+                        )
+                        ListItem(
+                            headlineContent = { Text("项目地址") },
+                            supportingContent = { Text("github.com/funkpopo/simpleshellmobile") },
+                            leadingContent = { Icon(Icons.Outlined.Code, contentDescription = null) },
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable {
+                                    uriHandler.openUri("https://github.com/funkpopo/simpleshellmobile")
+                                }
+                        )
+                    }
+                }
             }
         }
     }
