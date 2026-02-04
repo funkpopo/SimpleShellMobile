@@ -1,7 +1,10 @@
 package com.example.simpleshell.ui.screens.terminal
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.LocalIndication
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -49,8 +52,10 @@ fun ShortcutPanel(
             .fillMaxWidth()
             .background(Color.Black)
             .horizontalScroll(scrollState)
-            .padding(horizontal = 6.dp, vertical = 4.dp),
-        horizontalArrangement = Arrangement.spacedBy(6.dp),
+            .padding(horizontal = 4.dp, vertical = 4.dp),
+        // Keep visual gaps tight; clickable Surfaces add extra invisible padding due to min-touch targets.
+        // We use a non-clickable Surface + Modifier.clickable in ShortcutButton to avoid that.
+        horizontalArrangement = Arrangement.spacedBy(4.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
         shortcuts.forEach { shortcut ->
@@ -67,14 +72,23 @@ private fun ShortcutButton(
     shortcut: ShortcutItem,
     onClick: () -> Unit
 ) {
+    val interactionSource = remember { MutableInteractionSource() }
+
     Surface(
-        onClick = onClick,
         shape = RoundedCornerShape(4.dp),
         color = Color(0xFF1F1F1F),
-        modifier = Modifier.height(34.dp)
+        // Don't use Surface(onClick=...) here: Material applies minimum touch-target enforcement which
+        // increases the *layout* size without increasing the painted background, causing large visual gaps.
+        modifier = Modifier
+            .height(34.dp)
+            .clickable(
+                interactionSource = interactionSource,
+                indication = LocalIndication.current,
+                onClick = onClick
+            )
     ) {
         Box(
-            modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
+            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
             contentAlignment = Alignment.Center
         ) {
             Text(

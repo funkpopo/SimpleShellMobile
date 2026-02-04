@@ -5,6 +5,8 @@ import com.example.simpleshell.domain.model.Connection
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -32,7 +34,8 @@ class TerminalSession @Inject constructor(
     private var inputReader: BufferedReader? = null
     private var tempKeyFile: File? = null
 
-    private val scope = CoroutineScope(Dispatchers.IO)
+    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+    private var readJob: Job? = null
 
     private val _outputFlow = MutableStateFlow("")
     val outputFlow: StateFlow<String> = _outputFlow.asStateFlow()
@@ -40,11 +43,21 @@ class TerminalSession @Inject constructor(
     private val _isConnected = MutableStateFlow(false)
     val isConnected: StateFlow<Boolean> = _isConnected.asStateFlow()
 
+    private val _sessionId = MutableStateFlow(0L)
+    val sessionId: StateFlow<Long> = _sessionId.asStateFlow()
+
+    private val _connectedAtMs = MutableStateFlow<Long?>(null)
+    val connectedAtMs: StateFlow<Long?> = _connectedAtMs.asStateFlow()
+
+    private val _activeConnectionId = MutableStateFlow<Long?>(null)
+    val activeConnectionId: StateFlow<Long?> = _activeConnectionId.asStateFlow()
+
     private val outputBuffer = StringBuilder()
 
     suspend fun connect(connection: Connection) = withContext(Dispatchers.IO) {
         // Single shared session: ensure we don't leak resources if connect() is called repeatedly.
         disconnect()
+        clearOutput()
         try {
             client = SSHClient().apply {
                 addHostKeyVerifier(PromiscuousVerifier())
@@ -79,6 +92,10 @@ class TerminalSession @Inject constructor(
             }
 
             _isConnected.value = true
+            _sessionId.value = _sessionId.value + 1
+            _connectedAtMs.value = System.currentTimeMillis()
+            _activeConnectionId.value = connection.id
+
             startReadingOutput()
         } catch (e: Exception) {
             disconnect()
@@ -86,23 +103,31 @@ class TerminalSession @Inject constructor(
         }
     }
 
-    private suspend fun startReadingOutput() = withContext(Dispatchers.IO) {
-        try {
-            val buffer = CharArray(1024)
-            while (_isConnected.value && inputReader != null) {
-                val read = inputReader?.read(buffer) ?: -1
-                if (read > 0) {
-                    val text = String(buffer, 0, read)
-                    outputBuffer.append(text)
-                    _outputFlow.value = outputBuffer.toString()
-                } else if (read == -1) {
-                    break
+    private fun startReadingOutput() {
+        readJob?.cancel()
+        readJob = scope.launch {
+            try {
+                val buffer = CharArray(1024)
+                while (_isConnected.value && inputReader != null) {
+                    val read = inputReader?.read(buffer) ?: -1
+                    if (read > 0) {
+                        val text = String(buffer, 0, read)
+                        outputBuffer.append(text)
+                        _outputFlow.value = outputBuffer.toString()
+                    } else if (read == -1) {
+                        break
+                    }
                 }
-            }
-        } catch (e: Exception) {
-            if (_isConnected.value) {
-                outputBuffer.append("\n[Connection closed: ${e.message}]\n")
-                _outputFlow.value = outputBuffer.toString()
+            } catch (e: Exception) {
+                if (_isConnected.value) {
+                    outputBuffer.append("\n[Connection closed: ${e.message}]\n")
+                    _outputFlow.value = outputBuffer.toString()
+                }
+            } finally {
+                // If the remote end closed unexpectedly, ensure we reflect disconnected state.
+                if (_isConnected.value) {
+                    disconnect()
+                }
             }
         }
     }
@@ -131,10 +156,22 @@ class TerminalSession @Inject constructor(
 
     fun disconnect() {
         _isConnected.value = false
+        _connectedAtMs.value = null
+        _activeConnectionId.value = null
+
+        readJob?.cancel()
+        readJob = null
+
         try {
+            outputWriter?.close()
+            inputReader?.close()
             shell?.close()
             session?.close()
-            client?.disconnect()
+            try {
+                client?.disconnect()
+            } finally {
+                client?.close()
+            }
         } catch (e: Exception) {
             // Ignore disconnect errors
         } finally {

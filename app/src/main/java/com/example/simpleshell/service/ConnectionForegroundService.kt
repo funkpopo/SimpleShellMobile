@@ -21,6 +21,7 @@ import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import javax.inject.Inject
 
 @AndroidEntryPoint
@@ -59,9 +60,14 @@ class ConnectionForegroundService : Service() {
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         when (intent?.action) {
             ACTION_DISCONNECT -> {
-                disconnectAll()
-                stopForeground(STOP_FOREGROUND_REMOVE)
-                stopSelf()
+                // Disconnect may involve blocking I/O. Do it off the main thread, then stop.
+                serviceScope.launch {
+                    withContext(Dispatchers.IO) {
+                        disconnectAll()
+                    }
+                    stopForeground(STOP_FOREGROUND_REMOVE)
+                    stopSelf()
+                }
                 return START_NOT_STICKY
             }
             else -> {

@@ -44,6 +44,16 @@ class TerminalViewModel @Inject constructor(
                 )
             }
         }
+        viewModelScope.launch {
+            terminalSession.sessionId.collect { sessionId ->
+                _uiState.value = _uiState.value.copy(sessionId = sessionId)
+            }
+        }
+        viewModelScope.launch {
+            terminalSession.connectedAtMs.collect { connectedAtMs ->
+                _uiState.value = _uiState.value.copy(connectedAtMs = connectedAtMs)
+            }
+        }
     }
 
     private fun connect() {

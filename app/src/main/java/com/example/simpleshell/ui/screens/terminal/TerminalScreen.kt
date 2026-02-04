@@ -134,8 +134,13 @@ fun TerminalScreen(
             TopAppBar(
                 title = {
                     Row(verticalAlignment = Alignment.CenterVertically) {
+                        val titleText = if (uiState.sessionId > 0) {
+                            "${uiState.connectionName.ifEmpty { "Terminal" }}  #${uiState.sessionId}"
+                        } else {
+                            uiState.connectionName.ifEmpty { "Terminal" }
+                        }
                         Text(
-                            uiState.connectionName.ifEmpty { "Terminal" },
+                            titleText,
                             maxLines = 1
                         )
                         if (uiState.isConnected) {
@@ -227,6 +232,15 @@ fun TerminalScreen(
                                 .verticalScroll(scrollState)
                                 .padding(6.dp)
                         ) {
+                            if (!uiState.isConnected) {
+                                Text(
+                                    text = "Disconnected \u2014 tap Reconnect",
+                                    color = Color(0xFFFF5252),
+                                    fontSize = 12.sp
+                                )
+                                Spacer(modifier = Modifier.height(8.dp))
+                            }
+
                             // 终端输出文本，末尾带闪烁光标
                             val textWithCursor = remember(uiState.output) {
                                 buildAnnotatedString {
