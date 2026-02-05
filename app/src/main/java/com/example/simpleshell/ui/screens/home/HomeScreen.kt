@@ -23,8 +23,10 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
+import com.example.simpleshell.R
 import com.example.simpleshell.data.local.database.entity.ConnectionEntity
 import com.example.simpleshell.data.local.database.entity.GroupEntity
 
@@ -45,9 +47,9 @@ fun HomeScreen(
 
     if (showCreateGroupDialog) {
         GroupNameDialog(
-            title = "新建分组",
+            title = stringResource(R.string.new_group),
             initialValue = "",
-            confirmLabel = "创建",
+            confirmLabel = stringResource(R.string.create),
             onDismiss = { showCreateGroupDialog = false },
             onConfirm = { name ->
                 viewModel.createGroup(name)
@@ -58,9 +60,9 @@ fun HomeScreen(
 
     renameGroupTarget?.let { group ->
         GroupNameDialog(
-            title = "重命名分组",
+            title = stringResource(R.string.rename_group),
             initialValue = group.name,
-            confirmLabel = "保存",
+            confirmLabel = stringResource(R.string.save),
             onDismiss = { renameGroupTarget = null },
             onConfirm = { name ->
                 viewModel.renameGroup(group.id, name)
@@ -72,19 +74,19 @@ fun HomeScreen(
     deleteGroupTarget?.let { group ->
         AlertDialog(
             onDismissRequest = { deleteGroupTarget = null },
-            title = { Text("删除分组") },
-            text = { Text("确认删除分组“${group.name}”？该分组下的连接将变为未分组。") },
+            title = { Text(stringResource(R.string.delete_group)) },
+            text = { Text(stringResource(R.string.delete_group_confirm, group.name)) },
             confirmButton = {
                 TextButton(onClick = {
                     viewModel.deleteGroup(group)
                     deleteGroupTarget = null
                 }) {
-                    Text("删除")
+                    Text(stringResource(R.string.delete))
                 }
             },
             dismissButton = {
                 TextButton(onClick = { deleteGroupTarget = null }) {
-                    Text("取消")
+                    Text(stringResource(R.string.cancel))
                 }
             }
         )
@@ -93,13 +95,13 @@ fun HomeScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("SimpleShell") },
+                title = { Text(stringResource(R.string.app_name)) },
                 actions = {
                     IconButton(onClick = { showCreateGroupDialog = true }) {
-                        Icon(Icons.Default.CreateNewFolder, contentDescription = "Add Group")
+                        Icon(Icons.Default.CreateNewFolder, contentDescription = stringResource(R.string.add_group))
                     }
                     IconButton(onClick = onOpenSettings) {
-                        Icon(Icons.Default.Settings, contentDescription = "Settings")
+                        Icon(Icons.Default.Settings, contentDescription = stringResource(R.string.settings))
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
@@ -109,7 +111,7 @@ fun HomeScreen(
         },
         floatingActionButton = {
             FloatingActionButton(onClick = onAddConnection) {
-                Icon(Icons.Default.Add, contentDescription = "Add Connection")
+                Icon(Icons.Default.Add, contentDescription = stringResource(R.string.add_connection))
             }
         }
     ) { paddingValues ->
@@ -126,7 +128,7 @@ fun HomeScreen(
                 }
                 uiState.error != null -> {
                     Text(
-                        text = "Error: ${uiState.error}",
+                        text = stringResource(R.string.error_message, uiState.error ?: ""),
                         color = MaterialTheme.colorScheme.error,
                         modifier = Modifier
                             .align(Alignment.Center)
@@ -139,12 +141,12 @@ fun HomeScreen(
                         horizontalAlignment = Alignment.CenterHorizontally
                     ) {
                         Text(
-                            text = "No connections yet",
+                            text = stringResource(R.string.no_connections),
                             style = MaterialTheme.typography.bodyLarge
                         )
                         Spacer(modifier = Modifier.height(8.dp))
                         Text(
-                            text = "Tap + to add a new connection",
+                            text = stringResource(R.string.tap_to_add_connection),
                             style = MaterialTheme.typography.bodyMedium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
@@ -170,8 +172,8 @@ fun HomeScreen(
                         if (ungroupedConnections.isNotEmpty()) {
                             item(key = "header_ungrouped") {
                                 GroupHeader(
-                                    title = "未分组",
-                                    subtitle = "${ungroupedConnections.size} 个连接",
+                                    title = stringResource(R.string.ungrouped),
+                                    subtitle = stringResource(R.string.connections_count, ungroupedConnections.size),
                                     isEditable = false,
                                     onRename = {},
                                     onDelete = {}
@@ -196,7 +198,7 @@ fun HomeScreen(
                             item(key = "header_group_${group.id}") {
                                 GroupHeader(
                                     title = group.name,
-                                    subtitle = "${groupConnections.size} 个连接",
+                                    subtitle = stringResource(R.string.connections_count, groupConnections.size),
                                     isEditable = true,
                                     onRename = { renameGroupTarget = group },
                                     onDelete = { deleteGroupTarget = group }
@@ -206,7 +208,7 @@ fun HomeScreen(
                             if (groupConnections.isEmpty()) {
                                 item(key = "empty_group_${group.id}") {
                                     Text(
-                                        text = "暂无连接",
+                                        text = stringResource(R.string.no_connections_in_group),
                                         style = MaterialTheme.typography.bodySmall,
                                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                                         modifier = Modifier.padding(start = 16.dp, bottom = 8.dp)
@@ -253,8 +255,8 @@ private fun ConnectionRow(
     if (showDeleteDialog) {
         AlertDialog(
             onDismissRequest = { showDeleteDialog = false },
-            title = { Text("Delete Connection") },
-            text = { Text("Are you sure you want to delete '${connection.name}'?") },
+            title = { Text(stringResource(R.string.delete_connection)) },
+            text = { Text(stringResource(R.string.delete_connection_confirm, connection.name)) },
             confirmButton = {
                 TextButton(
                     onClick = {
@@ -262,12 +264,12 @@ private fun ConnectionRow(
                         showDeleteDialog = false
                     }
                 ) {
-                    Text("Delete")
+                    Text(stringResource(R.string.delete))
                 }
             },
             dismissButton = {
                 TextButton(onClick = { showDeleteDialog = false }) {
-                    Text("Cancel")
+                    Text(stringResource(R.string.cancel))
                 }
             }
         )
@@ -305,14 +307,14 @@ private fun ConnectionRow(
             trailingContent = {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     IconButton(onClick = onTerminal) {
-                        Icon(Icons.Default.Terminal, contentDescription = "Terminal")
+                        Icon(Icons.Default.Terminal, contentDescription = stringResource(R.string.terminal))
                     }
                     IconButton(onClick = onSftp) {
-                        Icon(Icons.Default.Folder, contentDescription = "SFTP")
+                        Icon(Icons.Default.Folder, contentDescription = stringResource(R.string.sftp))
                     }
                     Box {
                         IconButton(onClick = { menuExpanded = true }) {
-                            Icon(Icons.Default.MoreVert, contentDescription = "More")
+                            Icon(Icons.Default.MoreVert, contentDescription = stringResource(R.string.more))
                         }
                         DropdownMenu(
                             expanded = menuExpanded,
@@ -320,7 +322,7 @@ private fun ConnectionRow(
                         ) {
                             if (isTerminalConnected) {
                                 DropdownMenuItem(
-                                    text = { Text("断开连接") },
+                                    text = { Text(stringResource(R.string.disconnect)) },
                                     onClick = {
                                         menuExpanded = false
                                         onDisconnectTerminal()
@@ -331,7 +333,7 @@ private fun ConnectionRow(
                                 )
                             }
                             DropdownMenuItem(
-                                text = { Text("编辑") },
+                                text = { Text(stringResource(R.string.edit)) },
                                 onClick = {
                                     menuExpanded = false
                                     onEdit()
@@ -341,7 +343,7 @@ private fun ConnectionRow(
                                 }
                             )
                             DropdownMenuItem(
-                                text = { Text("删除") },
+                                text = { Text(stringResource(R.string.delete)) },
                                 onClick = {
                                     menuExpanded = false
                                     showDeleteDialog = true
@@ -394,12 +396,12 @@ private fun GroupHeader(
         if (isEditable) {
             Row {
                 IconButton(onClick = onRename) {
-                    Icon(Icons.Default.Edit, contentDescription = "Rename Group")
+                    Icon(Icons.Default.Edit, contentDescription = stringResource(R.string.rename_group))
                 }
                 IconButton(onClick = onDelete) {
                     Icon(
                         Icons.Default.Delete,
-                        contentDescription = "Delete Group",
+                        contentDescription = stringResource(R.string.delete_group),
                         tint = MaterialTheme.colorScheme.error
                     )
                 }
@@ -426,12 +428,12 @@ private fun GroupNameDialog(
                 OutlinedTextField(
                     value = value,
                     onValueChange = { value = it },
-                    label = { Text("分组名称") },
+                    label = { Text(stringResource(R.string.group_name)) },
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth()
                 )
                 Text(
-                    text = "提示：删除分组不会删除连接，只会取消分组。",
+                    text = stringResource(R.string.delete_group_hint),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -447,7 +449,7 @@ private fun GroupNameDialog(
         },
         dismissButton = {
             TextButton(onClick = onDismiss) {
-                Text("取消")
+                Text(stringResource(R.string.cancel))
             }
         }
     )

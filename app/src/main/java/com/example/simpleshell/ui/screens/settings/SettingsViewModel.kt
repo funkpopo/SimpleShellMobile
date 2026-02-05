@@ -6,6 +6,7 @@ import com.example.simpleshell.BuildConfig
 import com.example.simpleshell.data.local.preferences.UserPreferencesRepository
 import com.example.simpleshell.data.remote.UpdateCheckResult
 import com.example.simpleshell.data.remote.UpdateChecker
+import com.example.simpleshell.domain.model.Language
 import com.example.simpleshell.domain.model.ThemeColor
 import com.example.simpleshell.domain.model.ThemeMode
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -35,7 +36,8 @@ class SettingsViewModel @Inject constructor(
                     _uiState.value = _uiState.value.copy(
                         themeMode = prefs.themeMode,
                         dynamicColor = prefs.dynamicColor,
-                        themeColor = prefs.themeColor
+                        themeColor = prefs.themeColor,
+                        language = prefs.language
                     )
                 }
         }
@@ -56,6 +58,12 @@ class SettingsViewModel @Inject constructor(
     fun setThemeColor(color: ThemeColor) {
         viewModelScope.launch {
             userPreferencesRepository.setThemeColor(color)
+        }
+    }
+
+    fun setLanguage(language: Language) {
+        viewModelScope.launch {
+            userPreferencesRepository.setLanguage(language)
         }
     }
 

@@ -6,6 +6,7 @@ import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
+import com.example.simpleshell.domain.model.Language
 import com.example.simpleshell.domain.model.ThemeColor
 import com.example.simpleshell.domain.model.ThemeMode
 import dagger.hilt.android.qualifiers.ApplicationContext
@@ -26,6 +27,7 @@ class UserPreferencesRepository @Inject constructor(
         val THEME_MODE: Preferences.Key<String> = stringPreferencesKey("theme_mode")
         val DYNAMIC_COLOR: Preferences.Key<Boolean> = booleanPreferencesKey("dynamic_color")
         val THEME_COLOR: Preferences.Key<String> = stringPreferencesKey("theme_color")
+        val LANGUAGE: Preferences.Key<String> = stringPreferencesKey("language")
     }
 
     val preferences: Flow<UserPreferences> = context.userPreferencesDataStore.data
@@ -33,7 +35,8 @@ class UserPreferencesRepository @Inject constructor(
             UserPreferences(
                 themeMode = prefs[Keys.THEME_MODE]?.toThemeMode() ?: ThemeMode.SYSTEM,
                 dynamicColor = prefs[Keys.DYNAMIC_COLOR] ?: true,
-                themeColor = prefs[Keys.THEME_COLOR]?.toThemeColor() ?: ThemeColor.PURPLE
+                themeColor = prefs[Keys.THEME_COLOR]?.toThemeColor() ?: ThemeColor.PURPLE,
+                language = prefs[Keys.LANGUAGE]?.toLanguage() ?: Language.SYSTEM
             )
         }
 
@@ -54,6 +57,12 @@ class UserPreferencesRepository @Inject constructor(
             prefs[Keys.THEME_COLOR] = color.name
         }
     }
+
+    suspend fun setLanguage(language: Language) {
+        context.userPreferencesDataStore.edit { prefs ->
+            prefs[Keys.LANGUAGE] = language.name
+        }
+    }
 }
 
 private fun String.toThemeMode(): ThemeMode {
@@ -69,6 +78,14 @@ private fun String.toThemeColor(): ThemeColor {
         ThemeColor.valueOf(this)
     } catch (_: IllegalArgumentException) {
         ThemeColor.PURPLE
+    }
+}
+
+private fun String.toLanguage(): Language {
+    return try {
+        Language.valueOf(this)
+    } catch (_: IllegalArgumentException) {
+        Language.SYSTEM
     }
 }
 

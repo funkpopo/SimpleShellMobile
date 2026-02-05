@@ -28,6 +28,7 @@ import androidx.compose.material.icons.filled.ColorLens
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
+import androidx.compose.material.icons.filled.Language
 import androidx.compose.material.icons.filled.Palette
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Refresh
@@ -56,11 +57,14 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalUriHandler
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.example.simpleshell.BuildConfig
+import com.example.simpleshell.R
 import com.example.simpleshell.data.remote.ReleaseInfo
+import com.example.simpleshell.domain.model.Language
 import com.example.simpleshell.domain.model.ThemeColor
 import com.example.simpleshell.domain.model.ThemeMode
 
@@ -72,6 +76,7 @@ fun SettingsScreen(
 ) {
     val uiState by viewModel.uiState.collectAsState()
     var showThemeDialog by remember { mutableStateOf(false) }
+    var showLanguageDialog by remember { mutableStateOf(false) }
     var aboutExpanded by remember { mutableStateOf(false) }
     val uriHandler = LocalUriHandler.current
 
@@ -82,6 +87,17 @@ fun SettingsScreen(
             onSelected = { mode ->
                 viewModel.setThemeMode(mode)
                 showThemeDialog = false
+            }
+        )
+    }
+
+    if (showLanguageDialog) {
+        LanguageDialog(
+            current = uiState.language,
+            onDismiss = { showLanguageDialog = false },
+            onSelected = { language ->
+                viewModel.setLanguage(language)
+                showLanguageDialog = false
             }
         )
     }
@@ -112,10 +128,10 @@ fun SettingsScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("设置") },
+                title = { Text(stringResource(R.string.settings)) },
                 navigationIcon = {
                     IconButton(onClick = onNavigateBack) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = stringResource(R.string.back))
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
@@ -132,7 +148,7 @@ fun SettingsScreen(
         ) {
             item {
                 Text(
-                    text = "外观",
+                    text = stringResource(R.string.appearance),
                     style = MaterialTheme.typography.titleSmall,
                     modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
                     fontWeight = FontWeight.SemiBold
@@ -141,7 +157,7 @@ fun SettingsScreen(
 
             item {
                 ListItem(
-                    headlineContent = { Text("主题") },
+                    headlineContent = { Text(stringResource(R.string.theme)) },
                     supportingContent = { Text(themeModeLabel(uiState.themeMode)) },
                     leadingContent = {
                         Icon(Icons.Default.Palette, contentDescription = null)
@@ -154,8 +170,21 @@ fun SettingsScreen(
 
             item {
                 ListItem(
-                    headlineContent = { Text("动态配色 (Android 12+)") },
-                    supportingContent = { Text("跟随系统壁纸颜色生成配色") },
+                    headlineContent = { Text(stringResource(R.string.language)) },
+                    supportingContent = { Text(languageLabel(uiState.language)) },
+                    leadingContent = {
+                        Icon(Icons.Default.Language, contentDescription = null)
+                    },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable { showLanguageDialog = true }
+                )
+            }
+
+            item {
+                ListItem(
+                    headlineContent = { Text(stringResource(R.string.dynamic_color)) },
+                    supportingContent = { Text(stringResource(R.string.dynamic_color_desc)) },
                     leadingContent = {
                         Icon(Icons.Default.Palette, contentDescription = null)
                     },
@@ -175,7 +204,7 @@ fun SettingsScreen(
                     exit = shrinkVertically()
                 ) {
                     ListItem(
-                        headlineContent = { Text("主题颜色") },
+                        headlineContent = { Text(stringResource(R.string.theme_color)) },
                         supportingContent = {
                             Row(
                                 horizontalArrangement = Arrangement.spacedBy(12.dp),
@@ -205,7 +234,7 @@ fun SettingsScreen(
 
             item {
                 Text(
-                    text = "关于",
+                    text = stringResource(R.string.about),
                     style = MaterialTheme.typography.titleSmall,
                     modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
                     fontWeight = FontWeight.SemiBold
@@ -220,7 +249,7 @@ fun SettingsScreen(
                             verticalAlignment = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.spacedBy(8.dp)
                         ) {
-                            Text("版本 ${BuildConfig.VERSION_NAME} (${BuildConfig.VERSION_CODE})")
+                            Text(stringResource(R.string.version, BuildConfig.VERSION_NAME, BuildConfig.VERSION_CODE))
                             if (uiState.updateCheckState is UpdateCheckState.Checking) {
                                 CircularProgressIndicator(
                                     modifier = Modifier.size(16.dp),
@@ -238,12 +267,12 @@ fun SettingsScreen(
                             ) {
                                 Icon(
                                     imageVector = Icons.Default.Refresh,
-                                    contentDescription = "检查更新"
+                                    contentDescription = stringResource(R.string.check_update)
                                 )
                             }
                             Icon(
                                 imageVector = if (aboutExpanded) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
-                                contentDescription = if (aboutExpanded) "收起" else "展开"
+                                contentDescription = if (aboutExpanded) stringResource(R.string.collapse) else stringResource(R.string.expand)
                             )
                         }
                     },
@@ -261,12 +290,12 @@ fun SettingsScreen(
                 ) {
                     Column {
                         ListItem(
-                            headlineContent = { Text("作者") },
+                            headlineContent = { Text(stringResource(R.string.author)) },
                             supportingContent = { Text("Funkpopo") },
                             leadingContent = { Icon(Icons.Default.Person, contentDescription = null) }
                         )
                         ListItem(
-                            headlineContent = { Text("项目地址") },
+                            headlineContent = { Text(stringResource(R.string.project_url)) },
                             supportingContent = { Text("github.com/funkpopo/simpleshellmobile") },
                             leadingContent = { Icon(Icons.Outlined.Code, contentDescription = null) },
                             modifier = Modifier
@@ -290,7 +319,7 @@ private fun ThemeModeDialog(
 ) {
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("选择主题") },
+        title = { Text(stringResource(R.string.select_theme)) },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 ThemeMode.entries.forEach { mode ->
@@ -312,18 +341,64 @@ private fun ThemeModeDialog(
         },
         confirmButton = {
             TextButton(onClick = onDismiss) {
-                Text("关闭")
+                Text(stringResource(R.string.close))
             }
         }
     )
 }
 
+@Composable
 private fun themeModeLabel(mode: ThemeMode): String {
     return when (mode) {
-        ThemeMode.SYSTEM -> "跟随系统"
-        ThemeMode.LIGHT -> "浅色"
-        ThemeMode.DARK -> "深色"
+        ThemeMode.SYSTEM -> stringResource(R.string.theme_system)
+        ThemeMode.LIGHT -> stringResource(R.string.theme_light)
+        ThemeMode.DARK -> stringResource(R.string.theme_dark)
     }
+}
+
+@Composable
+private fun languageLabel(language: Language): String {
+    return when (language) {
+        Language.SYSTEM -> stringResource(R.string.language_system)
+        Language.ENGLISH -> stringResource(R.string.language_english)
+        Language.CHINESE -> stringResource(R.string.language_chinese)
+    }
+}
+
+@Composable
+private fun LanguageDialog(
+    current: Language,
+    onDismiss: () -> Unit,
+    onSelected: (Language) -> Unit
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(stringResource(R.string.select_language)) },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Language.entries.forEach { language ->
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable { onSelected(language) }
+                            .padding(vertical = 6.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        androidx.compose.material3.RadioButton(
+                            selected = (language == current),
+                            onClick = { onSelected(language) }
+                        )
+                        Text(languageLabel(language))
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = onDismiss) {
+                Text(stringResource(R.string.close))
+            }
+        }
+    )
 }
 
 @Composable
@@ -360,7 +435,7 @@ private fun ThemeColorItem(
         if (isSelected) {
             Icon(
                 imageVector = Icons.Default.Check,
-                contentDescription = "已选择",
+                contentDescription = stringResource(R.string.selected),
                 tint = Color.White,
                 modifier = Modifier.size(20.dp)
             )
@@ -376,14 +451,14 @@ private fun UpdateAvailableDialog(
 ) {
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("发现新版本") },
+        title = { Text(stringResource(R.string.new_version_found)) },
         text = {
             Column {
-                Text("最新版本: ${releaseInfo.tagName}")
+                Text(stringResource(R.string.latest_version, releaseInfo.tagName))
                 if (releaseInfo.body.isNotBlank()) {
                     Spacer(modifier = Modifier.height(8.dp))
                     Text(
-                        text = "更新内容:",
+                        text = stringResource(R.string.update_content),
                         fontWeight = FontWeight.SemiBold
                     )
                     Text(
@@ -395,12 +470,12 @@ private fun UpdateAvailableDialog(
         },
         confirmButton = {
             TextButton(onClick = onDownload) {
-                Text("前往下载")
+                Text(stringResource(R.string.go_download))
             }
         },
         dismissButton = {
             TextButton(onClick = onDismiss) {
-                Text("稍后再说")
+                Text(stringResource(R.string.later))
             }
         }
     )
@@ -410,11 +485,11 @@ private fun UpdateAvailableDialog(
 private fun AlreadyLatestDialog(onDismiss: () -> Unit) {
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("检查更新") },
-        text = { Text("当前已是最新版本") },
+        title = { Text(stringResource(R.string.check_update_title)) },
+        text = { Text(stringResource(R.string.already_latest)) },
         confirmButton = {
             TextButton(onClick = onDismiss) {
-                Text("确定")
+                Text(stringResource(R.string.ok))
             }
         }
     )
@@ -427,11 +502,11 @@ private fun UpdateErrorDialog(
 ) {
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("检查更新失败") },
+        title = { Text(stringResource(R.string.check_update_failed)) },
         text = { Text(message) },
         confirmButton = {
             TextButton(onClick = onDismiss) {
-                Text("确定")
+                Text(stringResource(R.string.ok))
             }
         }
     )

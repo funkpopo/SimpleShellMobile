@@ -29,7 +29,8 @@ class MainViewModel @Inject constructor(
                     _uiState.value = _uiState.value.copy(
                         themeMode = prefs.themeMode,
                         dynamicColor = prefs.dynamicColor,
-                        themeColor = prefs.themeColor
+                        themeColor = prefs.themeColor,
+                        language = prefs.language
                     )
                 }
         }
