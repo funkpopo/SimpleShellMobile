@@ -9,6 +9,9 @@
     <string name="dynamic_color">Dynamic Color (Android 12+)</string>
     <string name="dynamic_color_desc">Generate colors from system wallpaper</string>
     <string name="theme_color">Theme Color</string>
+    <string name="data">Data</string>
+    <string name="import_pc_config">Import PC config.json</string>
+    <string name="import_pc_config_desc">Import connections/groups from SimpleShell (PC) config.json</string>
     <string name="about">About</string>
     <string name="version">Version %1$s (%2$d)</string>
     <string name="check_update">Check for updates</string>
@@ -90,4 +93,11 @@
     <string name="already_latest">You are using the latest version</string>
     <string name="ok">OK</string>
     <string name="check_update_failed">Update Check Failed</string>
+
+    <!-- Import PC Config -->
+    <string name="import_pc_config_success_title">Import completed</string>
+    <string name="import_pc_config_success_message">Imported %1$d connections (%2$d password, %3$d key), created %4$d groups, skipped %5$d items.\nKey-based connections need you to add the private key in Edit.</string>
+    <string name="import_pc_config_error_title">Import failed</string>
+    <string name="import_pc_config_empty">Config file is empty</string>
+    <string name="import_pc_config_read_error">Failed to read config: %1$s</string>
 </resources>

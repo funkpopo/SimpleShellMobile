@@ -3,6 +3,7 @@ package com.example.simpleshell.ui.screens.connection
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.example.simpleshell.data.importing.SimpleShellPcCryptoCompat
 import com.example.simpleshell.data.local.database.entity.ConnectionEntity
 import com.example.simpleshell.data.repository.ConnectionRepository
 import com.example.simpleshell.data.repository.GroupRepository
@@ -52,15 +53,18 @@ class ConnectionEditViewModel @Inject constructor(
             try {
                 val connection = connectionRepository.getConnectionById(connectionId)
                 if (connection != null) {
+                    val decryptedPassword = SimpleShellPcCryptoCompat.decryptNullableMaybe(connection.password).orEmpty()
+                    val decryptedPassphrase =
+                        SimpleShellPcCryptoCompat.decryptNullableMaybe(connection.privateKeyPassphrase).orEmpty()
                     _uiState.value = _uiState.value.copy(
                         name = connection.name,
                         groupId = connection.groupId,
                         host = connection.host,
                         port = connection.port.toString(),
                         username = connection.username,
-                        password = connection.password ?: "",
+                        password = decryptedPassword,
                         privateKey = connection.privateKey ?: "",
-                        privateKeyPassphrase = connection.privateKeyPassphrase ?: "",
+                        privateKeyPassphrase = decryptedPassphrase,
                         authType = if (connection.authType == "key")
                             Connection.AuthType.KEY else Connection.AuthType.PASSWORD,
                         isLoading = false,

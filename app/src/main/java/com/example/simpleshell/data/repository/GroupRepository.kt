@@ -14,6 +14,24 @@ class GroupRepository @Inject constructor(
 
     suspend fun getGroupById(id: Long): GroupEntity? = groupDao.getGroupById(id)
 
+    /**
+     * Returns an existing group's id if present, otherwise creates it.
+     *
+     * @return Pair(groupId, createdNew)
+     */
+    suspend fun getOrCreateGroupId(name: String): Pair<Long, Boolean> {
+        val trimmed = name.trim()
+        require(trimmed.isNotBlank()) { "Group name is blank" }
+
+        val existingId = groupDao.getGroupIdByName(trimmed)
+        if (existingId != null) return existingId to false
+
+        val id = groupDao.insertGroup(
+            GroupEntity(name = trimmed)
+        )
+        return id to true
+    }
+
     suspend fun createGroup(name: String): Long {
         return groupDao.insertGroup(
             GroupEntity(name = name.trim())
@@ -33,4 +51,3 @@ class GroupRepository @Inject constructor(
         return groupDao.countByName(name.trim()) > 0
     }
 }
-

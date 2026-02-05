@@ -26,7 +26,9 @@ interface GroupDao {
     @Query("SELECT * FROM groups WHERE id = :id")
     suspend fun getGroupById(id: Long): GroupEntity?
 
+    @Query("SELECT id FROM groups WHERE name = :name LIMIT 1")
+    suspend fun getGroupIdByName(name: String): Long?
+
     @Query("SELECT COUNT(*) FROM groups WHERE name = :name")
     suspend fun countByName(name: String): Int
 }
-

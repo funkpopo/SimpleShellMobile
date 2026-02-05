@@ -1,5 +1,7 @@
 package com.example.simpleshell.ui.screens.settings
 
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.expandVertically
 import androidx.compose.animation.shrinkVertically
@@ -29,6 +31,7 @@ import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material.icons.filled.Language
+import androidx.compose.material.icons.filled.Folder
 import androidx.compose.material.icons.filled.Palette
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Refresh
@@ -56,6 +59,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
@@ -79,6 +83,29 @@ fun SettingsScreen(
     var showLanguageDialog by remember { mutableStateOf(false) }
     var aboutExpanded by remember { mutableStateOf(false) }
     val uriHandler = LocalUriHandler.current
+    val context = LocalContext.current
+
+    val configFilePicker = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.OpenDocument()
+    ) { uri ->
+        if (uri != null) {
+            try {
+                val jsonText = context.contentResolver.openInputStream(uri)?.use { input ->
+                    input.readBytes().toString(Charsets.UTF_8)
+                }.orEmpty()
+
+                if (jsonText.isBlank()) {
+                    viewModel.reportImportError(context.getString(R.string.import_pc_config_empty))
+                } else {
+                    viewModel.importPcConfig(jsonText)
+                }
+            } catch (e: Exception) {
+                viewModel.reportImportError(
+                    context.getString(R.string.import_pc_config_read_error, e.message ?: "")
+                )
+            }
+        }
+    }
 
     if (showThemeDialog) {
         ThemeModeDialog(
@@ -123,6 +150,46 @@ fun SettingsScreen(
             )
         }
         else -> {}
+    }
+
+    when (val importState = uiState.importState) {
+        is ImportState.Success -> {
+            val summary = importState.summary
+            AlertDialog(
+                onDismissRequest = { viewModel.dismissImportDialog() },
+                title = { Text(stringResource(R.string.import_pc_config_success_title)) },
+                text = {
+                    Text(
+                        stringResource(
+                            R.string.import_pc_config_success_message,
+                            summary.importedConnections,
+                            summary.importedPasswordConnections,
+                            summary.importedKeyConnections,
+                            summary.createdGroups,
+                            summary.skippedConnections
+                        )
+                    )
+                },
+                confirmButton = {
+                    TextButton(onClick = { viewModel.dismissImportDialog() }) {
+                        Text(stringResource(R.string.ok))
+                    }
+                }
+            )
+        }
+        is ImportState.Error -> {
+            AlertDialog(
+                onDismissRequest = { viewModel.dismissImportDialog() },
+                title = { Text(stringResource(R.string.import_pc_config_error_title)) },
+                text = { Text(importState.message) },
+                confirmButton = {
+                    TextButton(onClick = { viewModel.dismissImportDialog() }) {
+                        Text(stringResource(R.string.ok))
+                    }
+                }
+            )
+        }
+        else -> Unit
     }
 
     Scaffold(
@@ -226,6 +293,41 @@ fun SettingsScreen(
                         }
                     )
                 }
+            }
+
+            item {
+                Spacer(modifier = Modifier.height(16.dp))
+            }
+
+            item {
+                Text(
+                    text = stringResource(R.string.data),
+                    style = MaterialTheme.typography.titleSmall,
+                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+                    fontWeight = FontWeight.SemiBold
+                )
+            }
+
+            item {
+                val isImporting = uiState.importState is ImportState.Importing
+                ListItem(
+                    headlineContent = { Text(stringResource(R.string.import_pc_config)) },
+                    supportingContent = { Text(stringResource(R.string.import_pc_config_desc)) },
+                    leadingContent = { Icon(Icons.Default.Folder, contentDescription = null) },
+                    trailingContent = {
+                        if (isImporting) {
+                            CircularProgressIndicator(
+                                modifier = Modifier.size(16.dp),
+                                strokeWidth = 2.dp
+                            )
+                        }
+                    },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable(enabled = !isImporting) {
+                            configFilePicker.launch(arrayOf("application/json", "text/*", "*/*"))
+                        }
+                )
             }
 
             item {
@@ -511,4 +613,3 @@ private fun UpdateErrorDialog(
         }
     )
 }
-

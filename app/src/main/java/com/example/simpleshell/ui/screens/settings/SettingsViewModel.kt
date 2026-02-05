@@ -3,6 +3,7 @@ package com.example.simpleshell.ui.screens.settings
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.simpleshell.BuildConfig
+import com.example.simpleshell.data.importing.SimpleShellPcConfigImporter
 import com.example.simpleshell.data.local.preferences.UserPreferencesRepository
 import com.example.simpleshell.data.remote.UpdateCheckResult
 import com.example.simpleshell.data.remote.UpdateChecker
@@ -10,17 +11,20 @@ import com.example.simpleshell.domain.model.Language
 import com.example.simpleshell.domain.model.ThemeColor
 import com.example.simpleshell.domain.model.ThemeMode
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import javax.inject.Inject
 
 @HiltViewModel
 class SettingsViewModel @Inject constructor(
     private val userPreferencesRepository: UserPreferencesRepository,
-    private val updateChecker: UpdateChecker
+    private val updateChecker: UpdateChecker,
+    private val pcConfigImporter: SimpleShellPcConfigImporter
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(SettingsUiState())
@@ -89,5 +93,35 @@ class SettingsViewModel @Inject constructor(
     fun dismissUpdateDialog() {
         _uiState.value = _uiState.value.copy(updateCheckState = UpdateCheckState.Idle)
     }
-}
 
+    fun importPcConfig(jsonText: String) {
+        val trimmed = jsonText.trim()
+        if (trimmed.isBlank()) {
+            _uiState.value = _uiState.value.copy(importState = ImportState.Error("Empty config file"))
+            return
+        }
+        if (_uiState.value.importState is ImportState.Importing) return
+
+        viewModelScope.launch {
+            _uiState.value = _uiState.value.copy(importState = ImportState.Importing)
+            try {
+                val summary = withContext(Dispatchers.IO) {
+                    pcConfigImporter.importFromConfigJson(trimmed)
+                }
+                _uiState.value = _uiState.value.copy(importState = ImportState.Success(summary))
+            } catch (e: Exception) {
+                _uiState.value = _uiState.value.copy(
+                    importState = ImportState.Error(e.message ?: "Import failed")
+                )
+            }
+        }
+    }
+
+    fun reportImportError(message: String) {
+        _uiState.value = _uiState.value.copy(importState = ImportState.Error(message))
+    }
+
+    fun dismissImportDialog() {
+        _uiState.value = _uiState.value.copy(importState = ImportState.Idle)
+    }
+}

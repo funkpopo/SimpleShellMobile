@@ -3,6 +3,7 @@ package com.example.simpleshell.ui.screens.sftp
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.example.simpleshell.data.importing.SimpleShellPcCryptoCompat
 import com.example.simpleshell.data.repository.ConnectionRepository
 import com.example.simpleshell.domain.model.Connection
 import com.example.simpleshell.domain.model.SftpFile
@@ -58,15 +59,19 @@ class SftpViewModel @Inject constructor(
 
                 _uiState.value = _uiState.value.copy(connectionName = entity.name)
 
+                val decryptedPassword = SimpleShellPcCryptoCompat.decryptNullableMaybe(entity.password)
+                val decryptedPassphrase =
+                    SimpleShellPcCryptoCompat.decryptNullableMaybe(entity.privateKeyPassphrase)
+
                 val connection = Connection(
                     id = entity.id,
                     name = entity.name,
                     host = entity.host,
                     port = entity.port,
                     username = entity.username,
-                    password = entity.password,
+                    password = decryptedPassword,
                     privateKey = entity.privateKey,
-                    privateKeyPassphrase = entity.privateKeyPassphrase,
+                    privateKeyPassphrase = decryptedPassphrase,
                     authType = if (entity.authType == "key")
                         Connection.AuthType.KEY else Connection.AuthType.PASSWORD
                 )

@@ -10,6 +10,9 @@
     <string name="dynamic_color">动态配色 (Android 12+)</string>
     <string name="dynamic_color_desc">跟随系统壁纸颜色生成配色</string>
     <string name="theme_color">主题颜色</string>
+    <string name="data">数据</string>
+    <string name="import_pc_config">导入 PC 端 config.json</string>
+    <string name="import_pc_config_desc">从 SimpleShell（PC）config.json 导入连接与分组</string>
     <string name="about">关于</string>
     <string name="version">版本 %1$s (%2$d)</string>
     <string name="check_update">检查更新</string>
@@ -91,4 +94,11 @@
     <string name="already_latest">当前已是最新版本</string>
     <string name="ok">确定</string>
     <string name="check_update_failed">检查更新失败</string>
+
+    <!-- Import PC Config -->
+    <string name="import_pc_config_success_title">导入完成</string>
+    <string name="import_pc_config_success_message">已导入 %1$d 个连接（密码 %2$d、私钥 %3$d），新建 %4$d 个分组，跳过 %5$d 项。\n私钥连接需要在“编辑连接”中补充私钥内容。</string>
+    <string name="import_pc_config_error_title">导入失败</string>
+    <string name="import_pc_config_empty">配置文件为空</string>
+    <string name="import_pc_config_read_error">读取配置失败: %1$s</string>
 </resources>

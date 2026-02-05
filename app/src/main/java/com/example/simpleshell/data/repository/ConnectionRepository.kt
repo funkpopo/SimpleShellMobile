@@ -1,5 +1,6 @@
 package com.example.simpleshell.data.repository
 
+import com.example.simpleshell.data.importing.SimpleShellPcCryptoCompat
 import com.example.simpleshell.data.local.database.ConnectionDao
 import com.example.simpleshell.data.local.database.entity.ConnectionEntity
 import kotlinx.coroutines.flow.Flow
@@ -19,11 +20,11 @@ class ConnectionRepository @Inject constructor(
     }
 
     suspend fun saveConnection(connection: ConnectionEntity): Long {
-        return connectionDao.insertConnection(connection)
+        return connectionDao.insertConnection(connection.encryptSecretsForStorage())
     }
 
     suspend fun updateConnection(connection: ConnectionEntity) {
-        connectionDao.updateConnection(connection)
+        connectionDao.updateConnection(connection.encryptSecretsForStorage())
     }
 
     suspend fun deleteConnection(connection: ConnectionEntity) {
@@ -36,5 +37,13 @@ class ConnectionRepository @Inject constructor(
 
     suspend fun clearGroupForConnections(groupId: Long) {
         connectionDao.clearGroupForConnections(groupId)
+    }
+
+    private fun ConnectionEntity.encryptSecretsForStorage(): ConnectionEntity {
+        // Keep the rest of the entity intact, but ensure secrets are encrypted at rest.
+        return copy(
+            password = SimpleShellPcCryptoCompat.encryptNullableMaybe(password),
+            privateKeyPassphrase = SimpleShellPcCryptoCompat.encryptNullableMaybe(privateKeyPassphrase)
+        )
     }
 }
