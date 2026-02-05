@@ -95,6 +95,9 @@ dependencies {
     // sshj pulls this in as runtimeOnly, but we reference it directly to swap out Android's built-in "BC".
     implementation(libs.bouncycastle.bcprov)
 
+    // OkHttp for network requests
+    implementation(libs.okhttp)
+
     // ViewModel
     implementation(libs.androidx.lifecycle.viewmodel.compose)
 

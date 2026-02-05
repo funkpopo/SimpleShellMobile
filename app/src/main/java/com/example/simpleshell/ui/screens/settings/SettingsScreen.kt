@@ -30,8 +30,10 @@ import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material.icons.filled.Palette
 import androidx.compose.material.icons.filled.Person
+import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.outlined.Code
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -58,6 +60,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.example.simpleshell.BuildConfig
+import com.example.simpleshell.data.remote.ReleaseInfo
 import com.example.simpleshell.domain.model.ThemeColor
 import com.example.simpleshell.domain.model.ThemeMode
 
@@ -81,6 +84,29 @@ fun SettingsScreen(
                 showThemeDialog = false
             }
         )
+    }
+
+    when (val updateState = uiState.updateCheckState) {
+        is UpdateCheckState.NewVersionAvailable -> {
+            UpdateAvailableDialog(
+                releaseInfo = updateState.releaseInfo,
+                onDismiss = { viewModel.dismissUpdateDialog() },
+                onDownload = {
+                    uriHandler.openUri(updateState.releaseInfo.htmlUrl)
+                    viewModel.dismissUpdateDialog()
+                }
+            )
+        }
+        is UpdateCheckState.AlreadyLatest -> {
+            AlreadyLatestDialog(onDismiss = { viewModel.dismissUpdateDialog() })
+        }
+        is UpdateCheckState.Error -> {
+            UpdateErrorDialog(
+                message = updateState.message,
+                onDismiss = { viewModel.dismissUpdateDialog() }
+            )
+        }
+        else -> {}
     }
 
     Scaffold(
@@ -190,14 +216,36 @@ fun SettingsScreen(
                 ListItem(
                     headlineContent = { Text("SimpleShell") },
                     supportingContent = {
-                        Text("版本 ${BuildConfig.VERSION_NAME} (${BuildConfig.VERSION_CODE})")
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            Text("版本 ${BuildConfig.VERSION_NAME} (${BuildConfig.VERSION_CODE})")
+                            if (uiState.updateCheckState is UpdateCheckState.Checking) {
+                                CircularProgressIndicator(
+                                    modifier = Modifier.size(16.dp),
+                                    strokeWidth = 2.dp
+                                )
+                            }
+                        }
                     },
                     leadingContent = { Icon(Icons.Default.Info, contentDescription = null) },
                     trailingContent = {
-                        Icon(
-                            imageVector = if (aboutExpanded) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
-                            contentDescription = if (aboutExpanded) "收起" else "展开"
-                        )
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            IconButton(
+                                onClick = { viewModel.checkForUpdate() },
+                                enabled = uiState.updateCheckState !is UpdateCheckState.Checking
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Refresh,
+                                    contentDescription = "检查更新"
+                                )
+                            }
+                            Icon(
+                                imageVector = if (aboutExpanded) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
+                                contentDescription = if (aboutExpanded) "收起" else "展开"
+                            )
+                        }
                     },
                     modifier = Modifier
                         .fillMaxWidth()
@@ -318,5 +366,74 @@ private fun ThemeColorItem(
             )
         }
     }
+}
+
+@Composable
+private fun UpdateAvailableDialog(
+    releaseInfo: ReleaseInfo,
+    onDismiss: () -> Unit,
+    onDownload: () -> Unit
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("发现新版本") },
+        text = {
+            Column {
+                Text("最新版本: ${releaseInfo.tagName}")
+                if (releaseInfo.body.isNotBlank()) {
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text(
+                        text = "更新内容:",
+                        fontWeight = FontWeight.SemiBold
+                    )
+                    Text(
+                        text = releaseInfo.body.take(500),
+                        style = MaterialTheme.typography.bodySmall
+                    )
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = onDownload) {
+                Text("前往下载")
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text("稍后再说")
+            }
+        }
+    )
+}
+
+@Composable
+private fun AlreadyLatestDialog(onDismiss: () -> Unit) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("检查更新") },
+        text = { Text("当前已是最新版本") },
+        confirmButton = {
+            TextButton(onClick = onDismiss) {
+                Text("确定")
+            }
+        }
+    )
+}
+
+@Composable
+private fun UpdateErrorDialog(
+    message: String,
+    onDismiss: () -> Unit
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("检查更新失败") },
+        text = { Text(message) },
+        confirmButton = {
+            TextButton(onClick = onDismiss) {
+                Text("确定")
+            }
+        }
+    )
 }
 
