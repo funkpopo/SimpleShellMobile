@@ -38,6 +38,7 @@ local.properties
 .idea/misc.xml
 .idea/*.iml
 captures/
+.kotlin/
 
 # External native build
 .externalNativeBuild/
