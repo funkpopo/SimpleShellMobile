@@ -89,6 +89,9 @@ fun ConnectionEditScreen(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(paddingValues)
+                // With edge-to-edge + IME, content can be obscured by the on-screen keyboard.
+                // Adding IME padding keeps the bottom fields/buttons reachable while typing.
+                .imePadding()
                 .padding(16.dp)
                 .verticalScroll(rememberScrollState()),
             verticalArrangement = Arrangement.spacedBy(16.dp)

@@ -11,6 +11,8 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.CreateNewFolder
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.ExpandLess
+import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material.icons.filled.Folder
 import androidx.compose.material.icons.filled.LinkOff
 import androidx.compose.material.icons.filled.MoreVert
@@ -44,6 +46,14 @@ fun HomeScreen(
     var showCreateGroupDialog by remember { mutableStateOf(false) }
     var renameGroupTarget by remember { mutableStateOf<GroupEntity?>(null) }
     var deleteGroupTarget by remember { mutableStateOf<GroupEntity?>(null) }
+    // Group expansion state is managed locally (UI concern). Default is "all collapsed" by leaving the map empty.
+    val expandedGroupState = remember { mutableStateMapOf<Long, Boolean>() }
+    val ungroupedGroupId = Long.MIN_VALUE
+
+    fun isGroupExpanded(groupId: Long): Boolean = expandedGroupState[groupId] ?: false
+    fun toggleGroupExpanded(groupId: Long) {
+        expandedGroupState[groupId] = !(expandedGroupState[groupId] ?: false)
+    }
 
     if (showCreateGroupDialog) {
         GroupNameDialog(
@@ -170,52 +180,20 @@ fun HomeScreen(
                         verticalArrangement = Arrangement.spacedBy(12.dp)
                     ) {
                         if (ungroupedConnections.isNotEmpty()) {
+                            val isUngroupedExpanded = isGroupExpanded(ungroupedGroupId)
                             item(key = "header_ungrouped") {
                                 GroupHeader(
                                     title = stringResource(R.string.ungrouped),
                                     subtitle = stringResource(R.string.connections_count, ungroupedConnections.size),
                                     isEditable = false,
+                                    isExpanded = isUngroupedExpanded,
+                                    onToggleExpanded = { toggleGroupExpanded(ungroupedGroupId) },
                                     onRename = {},
                                     onDelete = {}
                                 )
                             }
-                            items(ungroupedConnections, key = { "conn_${it.id}" }) { connection ->
-                                ConnectionRow(
-                                    connection = connection,
-                                    isTerminalConnected = connection.id in uiState.connectedTerminalConnectionIds,
-                                    onDisconnectTerminal = { viewModel.disconnectTerminal(connection.id) },
-                                    onEdit = { onEditConnection(connection.id) },
-                                    onDelete = { viewModel.deleteConnection(connection) },
-                                    onTerminal = { onConnectTerminal(connection.id) },
-                                    onSftp = { onConnectSftp(connection.id) }
-                                )
-                            }
-                            item(key = "spacer_ungrouped") { Spacer(modifier = Modifier.height(8.dp)) }
-                        }
-
-                        uiState.groups.forEach { group ->
-                            val groupConnections = connectionsByGroup[group.id] ?: emptyList()
-                            item(key = "header_group_${group.id}") {
-                                GroupHeader(
-                                    title = group.name,
-                                    subtitle = stringResource(R.string.connections_count, groupConnections.size),
-                                    isEditable = true,
-                                    onRename = { renameGroupTarget = group },
-                                    onDelete = { deleteGroupTarget = group }
-                                )
-                            }
-
-                            if (groupConnections.isEmpty()) {
-                                item(key = "empty_group_${group.id}") {
-                                    Text(
-                                        text = stringResource(R.string.no_connections_in_group),
-                                        style = MaterialTheme.typography.bodySmall,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                        modifier = Modifier.padding(start = 16.dp, bottom = 8.dp)
-                                    )
-                                }
-                            } else {
-                                items(groupConnections, key = { "conn_${it.id}" }) { connection ->
+                            if (isUngroupedExpanded) {
+                                items(ungroupedConnections, key = { "conn_${it.id}" }) { connection ->
                                     ConnectionRow(
                                         connection = connection,
                                         isTerminalConnected = connection.id in uiState.connectedTerminalConnectionIds,
@@ -225,6 +203,48 @@ fun HomeScreen(
                                         onTerminal = { onConnectTerminal(connection.id) },
                                         onSftp = { onConnectSftp(connection.id) }
                                     )
+                                }
+                            }
+                            item(key = "spacer_ungrouped") { Spacer(modifier = Modifier.height(8.dp)) }
+                        }
+
+                        uiState.groups.forEach { group ->
+                            val groupConnections = connectionsByGroup[group.id] ?: emptyList()
+                            val isExpanded = isGroupExpanded(group.id)
+                            item(key = "header_group_${group.id}") {
+                                GroupHeader(
+                                    title = group.name,
+                                    subtitle = stringResource(R.string.connections_count, groupConnections.size),
+                                    isEditable = true,
+                                    isExpanded = isExpanded,
+                                    onToggleExpanded = { toggleGroupExpanded(group.id) },
+                                    onRename = { renameGroupTarget = group },
+                                    onDelete = { deleteGroupTarget = group }
+                                )
+                            }
+
+                            if (isExpanded) {
+                                if (groupConnections.isEmpty()) {
+                                    item(key = "empty_group_${group.id}") {
+                                        Text(
+                                            text = stringResource(R.string.no_connections_in_group),
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                            modifier = Modifier.padding(start = 16.dp, bottom = 8.dp)
+                                        )
+                                    }
+                                } else {
+                                    items(groupConnections, key = { "conn_${it.id}" }) { connection ->
+                                        ConnectionRow(
+                                            connection = connection,
+                                            isTerminalConnected = connection.id in uiState.connectedTerminalConnectionIds,
+                                            onDisconnectTerminal = { viewModel.disconnectTerminal(connection.id) },
+                                            onEdit = { onEditConnection(connection.id) },
+                                            onDelete = { viewModel.deleteConnection(connection) },
+                                            onTerminal = { onConnectTerminal(connection.id) },
+                                            onSftp = { onConnectSftp(connection.id) }
+                                        )
+                                    }
                                 }
                             }
 
@@ -369,12 +389,15 @@ private fun GroupHeader(
     title: String,
     subtitle: String,
     isEditable: Boolean,
+    isExpanded: Boolean,
+    onToggleExpanded: () -> Unit,
     onRename: () -> Unit,
     onDelete: () -> Unit
 ) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
+            .clickable(onClick = onToggleExpanded)
             .padding(horizontal = 8.dp, vertical = 4.dp),
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically
@@ -393,8 +416,8 @@ private fun GroupHeader(
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
         }
-        if (isEditable) {
-            Row {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            if (isEditable) {
                 IconButton(onClick = onRename) {
                     Icon(Icons.Default.Edit, contentDescription = stringResource(R.string.rename_group))
                 }
@@ -406,6 +429,12 @@ private fun GroupHeader(
                     )
                 }
             }
+
+            Icon(
+                imageVector = if (isExpanded) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
+                contentDescription = if (isExpanded) stringResource(R.string.collapse) else stringResource(R.string.expand),
+                tint = MaterialTheme.colorScheme.onSurfaceVariant
+            )
         }
     }
 }
