@@ -219,7 +219,7 @@ class ConnectionForegroundService : Service() {
         }
 
         val builder = NotificationCompat.Builder(this, CHANNEL_ID)
-            .setSmallIcon(R.drawable.ic_launcher_foreground)
+            .setSmallIcon(R.drawable.ic_notification_s)
             .setContentTitle("SimpleShell")
             .setContentText(contentText)
             .setContentIntent(openPendingIntent)
@@ -230,7 +230,7 @@ class ConnectionForegroundService : Service() {
             .setGroupSummary(true)
             .setStyle(inbox)
             .addAction(
-                R.drawable.ic_launcher_foreground,
+                R.drawable.ic_notification_s,
                 "Disconnect all",
                 disconnectAllPendingIntent
             )
@@ -261,7 +261,7 @@ class ConnectionForegroundService : Service() {
         )
 
         return NotificationCompat.Builder(this, CHANNEL_ID)
-            .setSmallIcon(R.drawable.ic_launcher_foreground)
+            .setSmallIcon(R.drawable.ic_notification_s)
             .setContentTitle(terminal.connectionName)
             .setContentText("Terminal 已连接")
             .setContentIntent(openPendingIntent)
@@ -270,7 +270,7 @@ class ConnectionForegroundService : Service() {
             .setCategory(NotificationCompat.CATEGORY_SERVICE)
             .setGroup(GROUP_KEY_CONNECTIONS)
             .addAction(
-                R.drawable.ic_launcher_foreground,
+                R.drawable.ic_notification_s,
                 "断开连接",
                 disconnectPendingIntent
             )
@@ -299,7 +299,7 @@ class ConnectionForegroundService : Service() {
         )
 
         return NotificationCompat.Builder(this, CHANNEL_ID)
-            .setSmallIcon(R.drawable.ic_launcher_foreground)
+            .setSmallIcon(R.drawable.ic_notification_s)
             .setContentTitle("SFTP")
             .setContentText("SFTP 已连接")
             .setContentIntent(openPendingIntent)
@@ -308,7 +308,7 @@ class ConnectionForegroundService : Service() {
             .setCategory(NotificationCompat.CATEGORY_SERVICE)
             .setGroup(GROUP_KEY_CONNECTIONS)
             .addAction(
-                R.drawable.ic_launcher_foreground,
+                R.drawable.ic_notification_s,
                 "Disconnect",
                 disconnectPendingIntent
             )

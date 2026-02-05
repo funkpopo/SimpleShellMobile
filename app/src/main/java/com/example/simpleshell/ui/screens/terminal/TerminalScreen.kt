@@ -12,6 +12,9 @@ import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.gestures.calculateZoom
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
@@ -45,9 +48,11 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
 import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.compose.ui.input.pointer.pointerInput
 import com.example.simpleshell.service.ConnectionForegroundService
 import com.example.simpleshell.ui.util.AnsiParser
 import com.example.simpleshell.ui.util.POST_NOTIFICATIONS_PERMISSION
+import kotlin.math.abs
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -123,6 +128,14 @@ fun TerminalScreen(
         scrollState.animateScrollTo(scrollState.maxValue)
     }
 
+    val fontScale = uiState.fontScale
+    val minFontScale = 0.5f
+    val maxFontScale = 2.5f
+
+    // Keep lambdas up-to-date inside pointerInput without restarting the whole gesture detector.
+    val onSetFontScale by rememberUpdatedState<(Float) -> Unit> { viewModel.setFontScale(it) }
+    val currentFontScale by rememberUpdatedState(fontScale)
+
     Scaffold(
         topBar = {
             TopAppBar(
@@ -170,6 +183,8 @@ fun TerminalScreen(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(paddingValues)
+                // Ensure the always-visible shortcut bar stays above the on-screen keyboard (IME).
+                .imePadding()
                 .background(Color.Black)
         ) {
             when {
@@ -212,6 +227,27 @@ fun TerminalScreen(
                         modifier = Modifier
                             .weight(1f)
                             .fillMaxWidth()
+                            // Pinch-to-zoom changes the terminal font scale without breaking 1-finger scroll.
+                            .pointerInput(Unit) {
+                                awaitEachGesture {
+                                    awaitFirstDown(requireUnconsumed = false)
+
+                                    // Keep a local copy for smooth scaling within the gesture.
+                                    var scale = currentFontScale
+
+                                    do {
+                                        val event = awaitPointerEvent()
+                                        if (event.changes.size >= 2) {
+                                            val zoomChange = event.calculateZoom()
+                                            if (abs(zoomChange - 1f) > 0.01f) {
+                                                scale = (scale * zoomChange).coerceIn(minFontScale, maxFontScale)
+                                                onSetFontScale(scale)
+                                                event.changes.forEach { it.consume() }
+                                            }
+                                        }
+                                    } while (event.changes.any { it.pressed })
+                                }
+                            }
                             .clickable(
                                 interactionSource = remember { MutableInteractionSource() },
                                 indication = null
@@ -230,7 +266,7 @@ fun TerminalScreen(
                                 Text(
                                     text = "Disconnected \u2014 tap Reconnect",
                                     color = Color(0xFFFF5252),
-                                    fontSize = 12.sp
+                                    fontSize = 12.sp * fontScale
                                 )
                                 Spacer(modifier = Modifier.height(8.dp))
                             }
@@ -251,15 +287,15 @@ fun TerminalScreen(
                             val cursorInlineContent = mapOf(
                                 "cursor" to InlineTextContent(
                                     Placeholder(
-                                        width = 10.sp,
-                                        height = 16.sp,
+                                        width = 10.sp * fontScale,
+                                        height = 16.sp * fontScale,
                                         placeholderVerticalAlign = PlaceholderVerticalAlign.TextCenter
                                     )
                                 ) {
                                     Box(
                                         modifier = Modifier
-                                            .width(10.dp)
-                                            .height(16.dp)
+                                            .width(10.dp * fontScale)
+                                            .height(16.dp * fontScale)
                                             .background(Color(0xFF4CAF50).copy(alpha = cursorAlpha))
                                     )
                                 }
@@ -268,8 +304,8 @@ fun TerminalScreen(
                             Text(
                                 text = textWithCursor,
                                 fontFamily = FontFamily.Monospace,
-                                fontSize = 14.sp,
-                                lineHeight = 18.sp,
+                                fontSize = 14.sp * fontScale,
+                                lineHeight = 18.sp * fontScale,
                                 inlineContent = cursorInlineContent
                             )
 

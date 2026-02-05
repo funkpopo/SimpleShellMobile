@@ -4,6 +4,7 @@ import android.content.Context
 import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
+import androidx.datastore.preferences.core.floatPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import com.example.simpleshell.domain.model.Language
@@ -28,6 +29,7 @@ class UserPreferencesRepository @Inject constructor(
         val DYNAMIC_COLOR: Preferences.Key<Boolean> = booleanPreferencesKey("dynamic_color")
         val THEME_COLOR: Preferences.Key<String> = stringPreferencesKey("theme_color")
         val LANGUAGE: Preferences.Key<String> = stringPreferencesKey("language")
+        val TERMINAL_FONT_SCALE: Preferences.Key<Float> = floatPreferencesKey("terminal_font_scale")
     }
 
     val preferences: Flow<UserPreferences> = context.userPreferencesDataStore.data
@@ -36,7 +38,8 @@ class UserPreferencesRepository @Inject constructor(
                 themeMode = prefs[Keys.THEME_MODE]?.toThemeMode() ?: ThemeMode.SYSTEM,
                 dynamicColor = prefs[Keys.DYNAMIC_COLOR] ?: true,
                 themeColor = prefs[Keys.THEME_COLOR]?.toThemeColor() ?: ThemeColor.PURPLE,
-                language = prefs[Keys.LANGUAGE]?.toLanguage() ?: Language.SYSTEM
+                language = prefs[Keys.LANGUAGE]?.toLanguage() ?: Language.SYSTEM,
+                terminalFontScale = prefs[Keys.TERMINAL_FONT_SCALE] ?: 1.0f
             )
         }
 
@@ -61,6 +64,12 @@ class UserPreferencesRepository @Inject constructor(
     suspend fun setLanguage(language: Language) {
         context.userPreferencesDataStore.edit { prefs ->
             prefs[Keys.LANGUAGE] = language.name
+        }
+    }
+
+    suspend fun setTerminalFontScale(scale: Float) {
+        context.userPreferencesDataStore.edit { prefs ->
+            prefs[Keys.TERMINAL_FONT_SCALE] = scale
         }
     }
 }
@@ -88,4 +97,3 @@ private fun String.toLanguage(): Language {
         Language.SYSTEM
     }
 }
-

@@ -21,6 +21,7 @@ import java.io.File
 import java.io.InputStreamReader
 import java.io.OutputStreamWriter
 import java.io.PrintWriter
+import java.util.concurrent.atomic.AtomicLong
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -122,6 +123,7 @@ class TerminalSshSession internal constructor(
     val connectedAtMs: StateFlow<Long?> = _connectedAtMs.asStateFlow()
 
     private val outputBuffer = StringBuilder()
+    private val disconnectGeneration = AtomicLong(0L)
 
     suspend fun connectIfNeeded(connection: Connection): Boolean = withContext(Dispatchers.IO) {
         require(connection.id == connectionId) {
@@ -130,15 +132,26 @@ class TerminalSshSession internal constructor(
 
         if (_isConnected.value) return@withContext false
 
-        // Ensure we don't leak resources if connect() is called repeatedly.
-        disconnect()
+        // Clean up any stale/half-open resources from a previous attempt without emitting
+        // a "disconnected" event (we're not transitioning from a connected state).
+        disconnectInternal(bumpGeneration = false, emitDisconnected = false)
 
         // Match previous behavior: a *new* connect clears output. If the session was already
         // connected we would have returned earlier and preserved the buffer.
         clearOutput()
 
+        // If disconnect() is called while we're connecting, it bumps this generation.
+        val connectGeneration = disconnectGeneration.get()
+
+        var newClient: SSHClient? = null
+        var newSession: Session? = null
+        var newShell: Session.Shell? = null
+        var newWriter: PrintWriter? = null
+        var newReader: BufferedReader? = null
+        var newTempKeyFile: File? = null
+
         try {
-            val newClient = SSHClient().apply {
+            newClient = SSHClient().apply {
                 addHostKeyVerifier(PromiscuousVerifier())
                 connect(connection.host, connection.port)
 
@@ -149,7 +162,7 @@ class TerminalSshSession internal constructor(
                     Connection.AuthType.KEY -> {
                         val rawKey = connection.privateKey ?: ""
                         val materialized = materializePrivateKey(context, rawKey)
-                        tempKeyFile = if (materialized.isTemp) materialized.file else null
+                        newTempKeyFile = if (materialized.isTemp) materialized.file else null
 
                         val keyProvider = connection.privateKeyPassphrase?.let { passphrase ->
                             loadKeys(materialized.file.absolutePath, passphrase)
@@ -159,47 +172,63 @@ class TerminalSshSession internal constructor(
                 }
             }
 
-            // Assign as we go so disconnect() can clean up on partial failures.
-            synchronized(stateLock) {
-                client = newClient
-            }
-
-            val newSession = newClient.startSession()
-            synchronized(stateLock) {
-                session = newSession
-            }
-            newSession.allocateDefaultPTY()
-            val newShell = newSession.startShell()
-            synchronized(stateLock) {
-                shell = newShell
-            }
-
-            val newWriter = PrintWriter(OutputStreamWriter(newShell.outputStream), true)
-            val newReader = BufferedReader(InputStreamReader(newShell.inputStream))
-
-            synchronized(stateLock) {
-                outputWriter = newWriter
-                inputReader = newReader
-            }
+            newSession = newClient.startSession().also { it.allocateDefaultPTY() }
+            newShell = newSession.startShell()
+            newWriter = PrintWriter(OutputStreamWriter(newShell.outputStream), true)
+            newReader = BufferedReader(InputStreamReader(newShell.inputStream))
 
             val now = System.currentTimeMillis()
-            _isConnected.value = true
-            _sessionId.value = _sessionId.value + 1
-            _connectedAtMs.value = now
-            onConnected(
-                TerminalConnectionSummary(
-                    connectionId = connectionId,
-                    connectionName = connection.name,
-                    connectedAtMs = now
-                )
-            )
+            val committed = synchronized(stateLock) {
+                // If the user requested disconnect while we were connecting, don't publish a
+                // connected state; just tear down what we created.
+                if (disconnectGeneration.get() != connectGeneration) {
+                    false
+                } else {
+                    client = newClient
+                    session = newSession
+                    shell = newShell
+                    outputWriter = newWriter
+                    inputReader = newReader
+                    tempKeyFile = newTempKeyFile
+
+                    _isConnected.value = true
+                    _sessionId.value = _sessionId.value + 1
+                    _connectedAtMs.value = now
+                    onConnected(
+                        TerminalConnectionSummary(
+                            connectionId = connectionId,
+                            connectionName = connection.name,
+                            connectedAtMs = now
+                        )
+                    )
+                    true
+                }
+            }
+            if (!committed) return@withContext false
 
             startReadingOutput()
 
             true
         } catch (e: Exception) {
-            disconnect()
             throw e
+        } finally {
+            // If we didn't commit the new resources into the shared state, close them here.
+            val committed = synchronized(stateLock) { client === newClient && newClient != null }
+            if (!committed) {
+                runCatching { newWriter?.close() }
+                runCatching { newReader?.close() }
+                runCatching { newShell?.close() }
+                runCatching { newSession?.close() }
+                runCatching {
+                    newClient?.let { c ->
+                        // Force-close the socket first to unblock any lingering transport reads/writes.
+                        runCatching { c.socket?.close() }
+                        runCatching { c.disconnect() }
+                        runCatching { c.close() }
+                    }
+                }
+                runCatching { newTempKeyFile?.delete() }
+            }
         }
     }
 
@@ -273,16 +302,22 @@ class TerminalSshSession internal constructor(
         val tempKeyFile: File?
     )
 
-    fun disconnect() {
-        val wasConnected = _isConnected.value
-
-        _isConnected.value = false
-        _connectedAtMs.value = null
-
+    private fun disconnectInternal(bumpGeneration: Boolean, emitDisconnected: Boolean) {
+        // The read loop can be blocked on I/O; cancel early and also close the socket below to
+        // ensure it unblocks promptly.
         readJob?.cancel()
         readJob = null
 
-        val toClose = synchronized(stateLock) {
+        val (wasConnected, toClose) = synchronized(stateLock) {
+            // Signal to any in-flight connect attempt that it should not publish a connected state.
+            if (bumpGeneration) {
+                disconnectGeneration.incrementAndGet()
+            }
+
+            val wasConnected = _isConnected.value
+            _isConnected.value = false
+            _connectedAtMs.value = null
+
             val snapshot = DisconnectSnapshot(
                 writer = outputWriter,
                 reader = inputReader,
@@ -297,29 +332,29 @@ class TerminalSshSession internal constructor(
             session = null
             client = null
             tempKeyFile = null
-            snapshot
+            wasConnected to snapshot
         }
+
+        // Update observers early so the UI/notification can reflect the disconnected state even
+        // if socket/channel shutdown takes a moment.
+        if (emitDisconnected && wasConnected) {
+            onDisconnected(connectionId)
+        }
+
+        // Force-close socket first to unblock any blocking reads/writes inside sshj/channel close.
+        runCatching { toClose.client?.socket?.close() }
 
         runCatching { toClose.writer?.close() }
         runCatching { toClose.reader?.close() }
         runCatching { toClose.shell?.close() }
         runCatching { toClose.session?.close() }
-        runCatching {
-            toClose.client?.let { c ->
-                try {
-                    if (c.isConnected) {
-                        c.disconnect()
-                    }
-                } finally {
-                    c.close()
-                }
-            }
-        }
+        runCatching { toClose.client?.disconnect() }
+        runCatching { toClose.client?.close() }
         runCatching { toClose.tempKeyFile?.delete() }
+    }
 
-        if (wasConnected) {
-            onDisconnected(connectionId)
-        }
+    fun disconnect() {
+        disconnectInternal(bumpGeneration = true, emitDisconnected = true)
     }
 
     fun clearOutput() {

@@ -4,14 +4,17 @@ import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.simpleshell.data.importing.SimpleShellPcCryptoCompat
+import com.example.simpleshell.data.local.preferences.UserPreferencesRepository
 import com.example.simpleshell.data.repository.ConnectionRepository
 import com.example.simpleshell.domain.model.Connection
 import com.example.simpleshell.ssh.TerminalSessionManager
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import javax.inject.Inject
@@ -20,6 +23,7 @@ import javax.inject.Inject
 class TerminalViewModel @Inject constructor(
     private val connectionRepository: ConnectionRepository,
     private val terminalSessionManager: TerminalSessionManager,
+    private val userPreferencesRepository: UserPreferencesRepository,
     savedStateHandle: SavedStateHandle
 ) : ViewModel() {
 
@@ -29,9 +33,25 @@ class TerminalViewModel @Inject constructor(
     private val _uiState = MutableStateFlow(TerminalUiState())
     val uiState: StateFlow<TerminalUiState> = _uiState.asStateFlow()
 
+    private var saveFontScaleJob: Job? = null
+
     init {
+        observePreferences()
         observeTerminalOutput()
         connect()
+    }
+
+    private fun observePreferences() {
+        viewModelScope.launch {
+            userPreferencesRepository.preferences
+                .catch {
+                    // If prefs are unreadable/corrupted, keep defaults.
+                }
+                .collect { prefs ->
+                    val clamped = clampFontScale(prefs.terminalFontScale)
+                    _uiState.value = _uiState.value.copy(fontScale = clamped)
+                }
+        }
     }
 
     private fun observeTerminalOutput() {
@@ -115,6 +135,19 @@ class TerminalViewModel @Inject constructor(
         session.sendInput(input)
     }
 
+    fun setFontScale(scale: Float) {
+        val clamped = clampFontScale(scale)
+        _uiState.value = _uiState.value.copy(fontScale = clamped)
+
+        // Persist with a small debounce so pinch gestures don't spam DataStore edits.
+        saveFontScaleJob?.cancel()
+        saveFontScaleJob = viewModelScope.launch(Dispatchers.IO) {
+            // A short delay is enough to coalesce multiple quick updates.
+            kotlinx.coroutines.delay(250)
+            userPreferencesRepository.setTerminalFontScale(clamped)
+        }
+    }
+
     fun reconnect() {
         // Disconnect may block; do it on IO to avoid ANR.
         viewModelScope.launch {
@@ -124,5 +157,12 @@ class TerminalViewModel @Inject constructor(
             session.clearOutput()
             connect()
         }
+    }
+
+    private fun clampFontScale(raw: Float): Float {
+        // Keep the range conservative: too small becomes unreadable; too large breaks layout.
+        val min = 0.4f
+        val max = 2.5f
+        return raw.coerceIn(min, max)
     }
 }
