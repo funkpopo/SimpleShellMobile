@@ -11,6 +11,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.collectAsState
 import androidx.compose.ui.Modifier
+import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.compose.rememberNavController
 import com.example.simpleshell.domain.model.ThemeMode
@@ -22,6 +23,7 @@ import dagger.hilt.android.AndroidEntryPoint
 @AndroidEntryPoint
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
+        installSplashScreen()
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
         setContent {
@@ -36,7 +38,8 @@ class MainActivity : ComponentActivity() {
 
             SimpleShellTheme(
                 darkTheme = darkTheme,
-                dynamicColor = mainUiState.dynamicColor
+                dynamicColor = mainUiState.dynamicColor,
+                themeColor = mainUiState.themeColor
             ) {
                 Surface(
                     modifier = Modifier.fillMaxSize(),

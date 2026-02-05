@@ -6,6 +6,7 @@ import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
+import com.example.simpleshell.domain.model.ThemeColor
 import com.example.simpleshell.domain.model.ThemeMode
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.flow.Flow
@@ -24,13 +25,15 @@ class UserPreferencesRepository @Inject constructor(
     private object Keys {
         val THEME_MODE: Preferences.Key<String> = stringPreferencesKey("theme_mode")
         val DYNAMIC_COLOR: Preferences.Key<Boolean> = booleanPreferencesKey("dynamic_color")
+        val THEME_COLOR: Preferences.Key<String> = stringPreferencesKey("theme_color")
     }
 
     val preferences: Flow<UserPreferences> = context.userPreferencesDataStore.data
         .map { prefs ->
             UserPreferences(
                 themeMode = prefs[Keys.THEME_MODE]?.toThemeMode() ?: ThemeMode.SYSTEM,
-                dynamicColor = prefs[Keys.DYNAMIC_COLOR] ?: true
+                dynamicColor = prefs[Keys.DYNAMIC_COLOR] ?: true,
+                themeColor = prefs[Keys.THEME_COLOR]?.toThemeColor() ?: ThemeColor.PURPLE
             )
         }
 
@@ -45,6 +48,12 @@ class UserPreferencesRepository @Inject constructor(
             prefs[Keys.DYNAMIC_COLOR] = enabled
         }
     }
+
+    suspend fun setThemeColor(color: ThemeColor) {
+        context.userPreferencesDataStore.edit { prefs ->
+            prefs[Keys.THEME_COLOR] = color.name
+        }
+    }
 }
 
 private fun String.toThemeMode(): ThemeMode {
@@ -52,6 +61,14 @@ private fun String.toThemeMode(): ThemeMode {
         ThemeMode.valueOf(this)
     } catch (_: IllegalArgumentException) {
         ThemeMode.SYSTEM
+    }
+}
+
+private fun String.toThemeColor(): ThemeColor {
+    return try {
+        ThemeColor.valueOf(this)
+    } catch (_: IllegalArgumentException) {
+        ThemeColor.PURPLE
     }
 }
 

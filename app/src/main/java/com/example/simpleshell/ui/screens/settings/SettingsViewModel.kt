@@ -3,6 +3,7 @@ package com.example.simpleshell.ui.screens.settings
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.simpleshell.data.local.preferences.UserPreferencesRepository
+import com.example.simpleshell.domain.model.ThemeColor
 import com.example.simpleshell.domain.model.ThemeMode
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -29,7 +30,8 @@ class SettingsViewModel @Inject constructor(
                 .collect { prefs ->
                     _uiState.value = _uiState.value.copy(
                         themeMode = prefs.themeMode,
-                        dynamicColor = prefs.dynamicColor
+                        dynamicColor = prefs.dynamicColor,
+                        themeColor = prefs.themeColor
                     )
                 }
         }
@@ -44,6 +46,12 @@ class SettingsViewModel @Inject constructor(
     fun setDynamicColor(enabled: Boolean) {
         viewModelScope.launch {
             userPreferencesRepository.setDynamicColor(enabled)
+        }
+    }
+
+    fun setThemeColor(color: ThemeColor) {
+        viewModelScope.launch {
+            userPreferencesRepository.setThemeColor(color)
         }
     }
 }

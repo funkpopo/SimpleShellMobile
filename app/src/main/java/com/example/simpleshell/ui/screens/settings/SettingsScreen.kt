@@ -3,8 +3,12 @@ package com.example.simpleshell.ui.screens.settings
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.expandVertically
 import androidx.compose.animation.shrinkVertically
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -13,9 +17,14 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.ColorLens
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
@@ -42,11 +51,14 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.collectAsState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.example.simpleshell.BuildConfig
+import com.example.simpleshell.domain.model.ThemeColor
 import com.example.simpleshell.domain.model.ThemeMode
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -128,6 +140,37 @@ fun SettingsScreen(
                         )
                     }
                 )
+            }
+
+            item {
+                AnimatedVisibility(
+                    visible = !uiState.dynamicColor,
+                    enter = expandVertically(),
+                    exit = shrinkVertically()
+                ) {
+                    ListItem(
+                        headlineContent = { Text("主题颜色") },
+                        supportingContent = {
+                            Row(
+                                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                                modifier = Modifier
+                                    .horizontalScroll(rememberScrollState())
+                                    .padding(vertical = 8.dp)
+                            ) {
+                                ThemeColor.entries.forEach { color ->
+                                    ThemeColorItem(
+                                        color = color,
+                                        isSelected = color == uiState.themeColor,
+                                        onClick = { viewModel.setThemeColor(color) }
+                                    )
+                                }
+                            }
+                        },
+                        leadingContent = {
+                            Icon(Icons.Default.ColorLens, contentDescription = null)
+                        }
+                    )
+                }
             }
 
             item {
@@ -232,6 +275,48 @@ private fun themeModeLabel(mode: ThemeMode): String {
         ThemeMode.SYSTEM -> "跟随系统"
         ThemeMode.LIGHT -> "浅色"
         ThemeMode.DARK -> "深色"
+    }
+}
+
+@Composable
+private fun ThemeColorItem(
+    color: ThemeColor,
+    isSelected: Boolean,
+    onClick: () -> Unit
+) {
+    val displayColor = when (color) {
+        ThemeColor.PURPLE -> Color(0xFF6650a4)
+        ThemeColor.BLUE -> Color(0xFF1976D2)
+        ThemeColor.GREEN -> Color(0xFF388E3C)
+        ThemeColor.ORANGE -> Color(0xFFF57C00)
+        ThemeColor.RED -> Color(0xFFD32F2F)
+        ThemeColor.TEAL -> Color(0xFF00796B)
+        ThemeColor.PINK -> Color(0xFFC2185B)
+    }
+
+    Box(
+        modifier = Modifier
+            .size(40.dp)
+            .clip(CircleShape)
+            .background(displayColor)
+            .then(
+                if (isSelected) {
+                    Modifier.border(3.dp, MaterialTheme.colorScheme.onSurface, CircleShape)
+                } else {
+                    Modifier
+                }
+            )
+            .clickable(onClick = onClick),
+        contentAlignment = Alignment.Center
+    ) {
+        if (isSelected) {
+            Icon(
+                imageVector = Icons.Default.Check,
+                contentDescription = "已选择",
+                tint = Color.White,
+                modifier = Modifier.size(20.dp)
+            )
+        }
     }
 }
 

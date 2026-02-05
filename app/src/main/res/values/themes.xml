@@ -2,4 +2,10 @@
 <resources>
 
     <style name="Theme.SimpleShell" parent="android:Theme.Material.Light.NoActionBar" />
+
+    <style name="Theme.SimpleShell.Splash" parent="Theme.SplashScreen">
+        <item name="windowSplashScreenBackground">@color/ic_launcher_background</item>
+        <item name="windowSplashScreenAnimatedIcon">@mipmap/ic_launcher_foreground</item>
+        <item name="postSplashScreenTheme">@style/Theme.SimpleShell</item>
+    </style>
 </resources>

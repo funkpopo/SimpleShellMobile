@@ -26,7 +26,7 @@
             android:exported="true"
             android:screenOrientation="portrait"
             tools:ignore="LockedOrientationActivity,DiscouragedApi"
-            android:theme="@style/Theme.SimpleShell">
+            android:theme="@style/Theme.SimpleShell.Splash">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
 
