@@ -14,8 +14,8 @@ android {
         applicationId = "com.example.simpleshell"
         minSdk = 26
         targetSdk = 35
-        versionCode = 1
-        versionName = "1.0"
+        versionCode = property("VERSION_CODE").toString().toInt()
+        versionName = property("VERSION_NAME").toString()
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
@@ -56,6 +56,14 @@ android {
         disable += "OldTargetApi"
         // Triggered by sshj's transitive BouncyCastle dependency; not directly actionable in this app code.
         disable += "TrustAllX509TrustManager"
+    }
+
+    applicationVariants.all {
+        val variant = this
+        variant.outputs.all {
+            val output = this as com.android.build.gradle.internal.api.BaseVariantOutputImpl
+            output.outputFileName = "SimpleShell-${variant.versionName}-${variant.buildType.name}.apk"
+        }
     }
 }
 
