@@ -9,11 +9,17 @@ interface ConnectionDao {
     @Query("SELECT * FROM connections ORDER BY lastConnectedAt DESC, createdAt DESC")
     fun getAllConnections(): Flow<List<ConnectionEntity>>
 
+    @Query("SELECT * FROM connections ORDER BY createdAt ASC")
+    suspend fun getAllConnectionsOnce(): List<ConnectionEntity>
+
     @Query("SELECT * FROM connections WHERE id = :id")
     suspend fun getConnectionById(id: Long): ConnectionEntity?
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertConnection(connection: ConnectionEntity): Long
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertConnections(connections: List<ConnectionEntity>)
 
     @Update
     suspend fun updateConnection(connection: ConnectionEntity)
@@ -26,4 +32,7 @@ interface ConnectionDao {
 
     @Query("UPDATE connections SET groupId = NULL WHERE groupId = :groupId")
     suspend fun clearGroupForConnections(groupId: Long)
+
+    @Query("DELETE FROM connections")
+    suspend fun clearAll()
 }

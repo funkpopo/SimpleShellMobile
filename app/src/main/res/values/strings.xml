@@ -12,6 +12,12 @@
     <string name="data">Data</string>
     <string name="import_pc_config">Import PC config.json</string>
     <string name="import_pc_config_desc">Import connections/groups from SimpleShell (PC) config.json</string>
+    <string name="export_sync_package">Export Sync Package (.ssdb)</string>
+    <string name="export_sync_package_desc">Export connections, AI config, command history and UI preferences</string>
+    <string name="import_sync_package">Import Sync Package (.ssdb)</string>
+    <string name="import_sync_package_desc">Import and replace current data (auto backup before import)</string>
+    <string name="sync_package_result_title">Sync Result</string>
+    <string name="sync_package_error_title">Sync Failed</string>
     <string name="about">About</string>
     <string name="version">Version %1$s (%2$d)</string>
     <string name="check_update">Check for updates</string>
