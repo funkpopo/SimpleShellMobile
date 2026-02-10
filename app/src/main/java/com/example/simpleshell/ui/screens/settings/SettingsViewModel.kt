@@ -1,5 +1,7 @@
-package com.example.simpleshell.ui.screens.settings
+﻿package com.example.simpleshell.ui.screens.settings
 
+import android.content.ContentResolver
+import android.net.Uri
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.simpleshell.BuildConfig
@@ -7,6 +9,7 @@ import com.example.simpleshell.data.importing.SimpleShellPcConfigImporter
 import com.example.simpleshell.data.local.preferences.UserPreferencesRepository
 import com.example.simpleshell.data.remote.UpdateCheckResult
 import com.example.simpleshell.data.remote.UpdateChecker
+import com.example.simpleshell.data.sync.SyncPackageService
 import com.example.simpleshell.domain.model.Language
 import com.example.simpleshell.domain.model.ThemeColor
 import com.example.simpleshell.domain.model.ThemeMode
@@ -24,7 +27,8 @@ import javax.inject.Inject
 class SettingsViewModel @Inject constructor(
     private val userPreferencesRepository: UserPreferencesRepository,
     private val updateChecker: UpdateChecker,
-    private val pcConfigImporter: SimpleShellPcConfigImporter
+    private val pcConfigImporter: SimpleShellPcConfigImporter,
+    private val syncPackageService: SyncPackageService
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(SettingsUiState())
@@ -115,6 +119,67 @@ class SettingsViewModel @Inject constructor(
                 )
             }
         }
+    }
+
+    fun exportSyncPackage(contentResolver: ContentResolver, uri: Uri) {
+        if (_uiState.value.syncState is SyncState.Working) return
+
+        viewModelScope.launch {
+            _uiState.value = _uiState.value.copy(syncState = SyncState.Working)
+            try {
+                val payload = withContext(Dispatchers.IO) {
+                    syncPackageService.exportToByteArray()
+                }
+
+                withContext(Dispatchers.IO) {
+                    contentResolver.openOutputStream(uri)?.use { stream ->
+                        stream.write(payload)
+                        stream.flush()
+                    } ?: error("Unable to open destination file")
+                }
+
+                _uiState.value = _uiState.value.copy(
+                    syncState = SyncState.Success("Sync package exported")
+                )
+            } catch (e: Exception) {
+                _uiState.value = _uiState.value.copy(
+                    syncState = SyncState.Error(e.message ?: "Export failed")
+                )
+            }
+        }
+    }
+
+    fun importSyncPackage(contentResolver: ContentResolver, uri: Uri) {
+        if (_uiState.value.syncState is SyncState.Working) return
+
+        viewModelScope.launch {
+            _uiState.value = _uiState.value.copy(syncState = SyncState.Working)
+            try {
+                val bytes = withContext(Dispatchers.IO) {
+                    contentResolver.openInputStream(uri)?.use { stream ->
+                        stream.readBytes()
+                    } ?: error("Unable to read sync package")
+                }
+
+                val result = withContext(Dispatchers.IO) {
+                    syncPackageService.importFromByteArray(bytes)
+                }
+
+                _uiState.value = _uiState.value.copy(
+                    syncState = SyncState.Success(
+                        "Imported ${result.importedConnections} connections, backup: ${result.backupFile.name}"
+                    )
+                )
+            } catch (e: Exception) {
+                _uiState.value = _uiState.value.copy(
+                    syncState = SyncState.Error(e.message ?: "Import failed")
+                )
+            }
+        }
+    }
+
+    fun dismissSyncDialog() {
+        _uiState.value = _uiState.value.copy(syncState = SyncState.Idle)
     }
 
     fun reportImportError(message: String) {

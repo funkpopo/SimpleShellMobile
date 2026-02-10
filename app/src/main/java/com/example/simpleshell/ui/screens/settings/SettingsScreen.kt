@@ -107,6 +107,22 @@ fun SettingsScreen(
         }
     }
 
+    val syncImportPicker = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.OpenDocument()
+    ) { uri ->
+        if (uri != null) {
+            viewModel.importSyncPackage(context.contentResolver, uri)
+        }
+    }
+
+    val syncExportPicker = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.CreateDocument("application/octet-stream")
+    ) { uri ->
+        if (uri != null) {
+            viewModel.exportSyncPackage(context.contentResolver, uri)
+        }
+    }
+
     if (showThemeDialog) {
         ThemeModeDialog(
             current = uiState.themeMode,
@@ -150,6 +166,34 @@ fun SettingsScreen(
             )
         }
         else -> {}
+    }
+
+    when (val syncState = uiState.syncState) {
+        is SyncState.Success -> {
+            AlertDialog(
+                onDismissRequest = { viewModel.dismissSyncDialog() },
+                title = { Text(stringResource(R.string.sync_package_result_title)) },
+                text = { Text(syncState.message) },
+                confirmButton = {
+                    TextButton(onClick = { viewModel.dismissSyncDialog() }) {
+                        Text(stringResource(R.string.ok))
+                    }
+                }
+            )
+        }
+        is SyncState.Error -> {
+            AlertDialog(
+                onDismissRequest = { viewModel.dismissSyncDialog() },
+                title = { Text(stringResource(R.string.sync_package_error_title)) },
+                text = { Text(syncState.message) },
+                confirmButton = {
+                    TextButton(onClick = { viewModel.dismissSyncDialog() }) {
+                        Text(stringResource(R.string.ok))
+                    }
+                }
+            )
+        }
+        else -> Unit
     }
 
     when (val importState = uiState.importState) {
@@ -310,6 +354,7 @@ fun SettingsScreen(
 
             item {
                 val isImporting = uiState.importState is ImportState.Importing
+                val syncWorking = uiState.syncState is SyncState.Working
                 ListItem(
                     headlineContent = { Text(stringResource(R.string.import_pc_config)) },
                     supportingContent = { Text(stringResource(R.string.import_pc_config_desc)) },
@@ -324,8 +369,46 @@ fun SettingsScreen(
                     },
                     modifier = Modifier
                         .fillMaxWidth()
-                        .clickable(enabled = !isImporting) {
+                        .clickable(enabled = !isImporting && !syncWorking) {
                             configFilePicker.launch(arrayOf("application/json", "text/*", "*/*"))
+                        }
+                )
+
+                ListItem(
+                    headlineContent = { Text(stringResource(R.string.export_sync_package)) },
+                    supportingContent = { Text(stringResource(R.string.export_sync_package_desc)) },
+                    leadingContent = { Icon(Icons.Default.Folder, contentDescription = null) },
+                    trailingContent = {
+                        if (syncWorking) {
+                            CircularProgressIndicator(
+                                modifier = Modifier.size(16.dp),
+                                strokeWidth = 2.dp
+                            )
+                        }
+                    },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable(enabled = !isImporting && !syncWorking) {
+                            syncExportPicker.launch("simpleshell-sync-${System.currentTimeMillis()}.ssdb")
+                        }
+                )
+
+                ListItem(
+                    headlineContent = { Text(stringResource(R.string.import_sync_package)) },
+                    supportingContent = { Text(stringResource(R.string.import_sync_package_desc)) },
+                    leadingContent = { Icon(Icons.Default.Folder, contentDescription = null) },
+                    trailingContent = {
+                        if (syncWorking) {
+                            CircularProgressIndicator(
+                                modifier = Modifier.size(16.dp),
+                                strokeWidth = 2.dp
+                            )
+                        }
+                    },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable(enabled = !isImporting && !syncWorking) {
+                            syncImportPicker.launch(arrayOf("application/octet-stream", "application/x-sqlite3", "*/*"))
                         }
                 )
             }

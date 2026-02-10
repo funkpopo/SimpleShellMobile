@@ -62,6 +62,8 @@ class SftpViewModel @Inject constructor(
                 val decryptedPassword = SimpleShellPcCryptoCompat.decryptNullableMaybe(entity.password)
                 val decryptedPassphrase =
                     SimpleShellPcCryptoCompat.decryptNullableMaybe(entity.privateKeyPassphrase)
+                val decryptedPrivateKey =
+                    SimpleShellPcCryptoCompat.decryptNullableMaybe(entity.privateKey)
 
                 val connection = Connection(
                     id = entity.id,
@@ -70,7 +72,7 @@ class SftpViewModel @Inject constructor(
                     port = entity.port,
                     username = entity.username,
                     password = decryptedPassword,
-                    privateKey = entity.privateKey,
+                    privateKey = decryptedPrivateKey,
                     privateKeyPassphrase = decryptedPassphrase,
                     authType = if (entity.authType == "key")
                         Connection.AuthType.KEY else Connection.AuthType.PASSWORD

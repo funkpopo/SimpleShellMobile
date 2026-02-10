@@ -43,6 +43,7 @@ class ConnectionRepository @Inject constructor(
         // Keep the rest of the entity intact, but ensure secrets are encrypted at rest.
         return copy(
             password = SimpleShellPcCryptoCompat.encryptNullableMaybe(password),
+            privateKey = SimpleShellPcCryptoCompat.encryptNullableMaybe(privateKey),
             privateKeyPassphrase = SimpleShellPcCryptoCompat.encryptNullableMaybe(privateKeyPassphrase)
         )
     }

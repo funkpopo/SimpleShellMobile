@@ -14,8 +14,14 @@ interface GroupDao {
     @Query("SELECT * FROM groups ORDER BY name COLLATE NOCASE ASC, createdAt ASC")
     fun getAllGroups(): Flow<List<GroupEntity>>
 
+    @Query("SELECT * FROM groups ORDER BY name COLLATE NOCASE ASC, createdAt ASC")
+    suspend fun getAllGroupsOnce(): List<GroupEntity>
+
     @Insert(onConflict = OnConflictStrategy.ABORT)
     suspend fun insertGroup(group: GroupEntity): Long
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertGroups(groups: List<GroupEntity>)
 
     @Update
     suspend fun updateGroup(group: GroupEntity)
@@ -31,4 +37,7 @@ interface GroupDao {
 
     @Query("SELECT COUNT(*) FROM groups WHERE name = :name")
     suspend fun countByName(name: String): Int
+
+    @Query("DELETE FROM groups")
+    suspend fun clearAll()
 }

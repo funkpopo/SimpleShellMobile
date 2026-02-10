@@ -22,8 +22,8 @@ data class SimpleShellPcImportSummary(
  * Notes:
  * - Passwords/privateKeyPath are encrypted in the PC app config; we keep the encrypted payload and decrypt
  *   it only when connecting. If a config contains plaintext passwords, we encrypt them before storage.
- * - The PC app stores *privateKeyPath* (file path), while mobile stores the PEM content. For now we
- *   import key-based connections without the private key content; users can edit and import the key file.
+ * - If a PC config includes private key PEM content, we import it. For legacy entries that only include
+ *   privateKeyPath, mobile keeps key auth but may require users to provide key content manually.
  */
 @Singleton
 class SimpleShellPcConfigImporter @Inject constructor(
@@ -88,10 +88,18 @@ class SimpleShellPcConfigImporter @Inject constructor(
 
         val passwordRaw = obj.optString("password", "").trim()
         val passwordToStore = passwordRaw.ifBlank { null }
+        val privateKeyRaw = obj.optString("privateKey", "").trim()
+        val privateKeyToStore = privateKeyRaw.ifBlank { null }
+        val privateKeyPassphraseRaw = obj.optString("privateKeyPassphrase", "").trim()
+        val privateKeyPassphraseToStore = privateKeyPassphraseRaw.ifBlank { null }
 
-        // Keep password-based connections usable immediately. If PC config says "privateKey" but a password
-        // is present, prefer password auth (mobile can't import the key file path as PEM content).
-        val finalAuthType = if (wantsKeyAuth && passwordToStore.isNullOrBlank()) "key" else "password"
+        // Keep password-based connections usable immediately. If key auth is requested but key material
+        // is unavailable and password exists, fall back to password auth.
+        val finalAuthType = when {
+            wantsKeyAuth && !privateKeyToStore.isNullOrBlank() -> "key"
+            wantsKeyAuth && passwordToStore.isNullOrBlank() -> "key"
+            else -> "password"
+        }
 
         val entity = ConnectionEntity(
             name = name,
@@ -101,8 +109,8 @@ class SimpleShellPcConfigImporter @Inject constructor(
             username = username,
             // Stored encrypted at rest by ConnectionRepository; we keep the raw PC payload here.
             password = if (finalAuthType == "password") passwordToStore else null,
-            privateKey = null,
-            privateKeyPassphrase = null,
+            privateKey = if (finalAuthType == "key") privateKeyToStore else null,
+            privateKeyPassphrase = if (finalAuthType == "key") privateKeyPassphraseToStore else null,
             authType = finalAuthType
         )
 

@@ -56,6 +56,8 @@ class ConnectionEditViewModel @Inject constructor(
                     val decryptedPassword = SimpleShellPcCryptoCompat.decryptNullableMaybe(connection.password).orEmpty()
                     val decryptedPassphrase =
                         SimpleShellPcCryptoCompat.decryptNullableMaybe(connection.privateKeyPassphrase).orEmpty()
+                    val decryptedPrivateKey =
+                        SimpleShellPcCryptoCompat.decryptNullableMaybe(connection.privateKey)
                     _uiState.value = _uiState.value.copy(
                         name = connection.name,
                         groupId = connection.groupId,
@@ -63,7 +65,7 @@ class ConnectionEditViewModel @Inject constructor(
                         port = connection.port.toString(),
                         username = connection.username,
                         password = decryptedPassword,
-                        privateKey = connection.privateKey ?: "",
+                        privateKey = decryptedPrivateKey.orEmpty(),
                         privateKeyPassphrase = decryptedPassphrase,
                         authType = if (connection.authType == "key")
                             Connection.AuthType.KEY else Connection.AuthType.PASSWORD,
