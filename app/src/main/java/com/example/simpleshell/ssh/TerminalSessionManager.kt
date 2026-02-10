@@ -14,6 +14,7 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import net.schmizz.sshj.SSHClient
+import net.schmizz.sshj.common.IOUtils
 import net.schmizz.sshj.connection.channel.direct.Session
 import net.schmizz.sshj.transport.verification.PromiscuousVerifier
 import java.io.BufferedReader
@@ -21,6 +22,7 @@ import java.io.File
 import java.io.InputStreamReader
 import java.io.OutputStreamWriter
 import java.io.PrintWriter
+import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicLong
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -292,6 +294,31 @@ class TerminalSshSession internal constructor(
             }
         }
     }
+
+    /**
+     * Executes a one-shot command on the existing SSH connection via a new exec channel.
+     * Returns the command's stdout, or null if not connected / on error.
+     * This does NOT affect the interactive shell session.
+     */
+    suspend fun executeExecCommand(command: String, timeoutSeconds: Long = 10): String? =
+        withContext(Dispatchers.IO) {
+            try {
+                val execSession: Session = synchronized(stateLock) {
+                    client?.startSession()
+                } ?: return@withContext null
+
+                try {
+                    val cmd = execSession.exec(command)
+                    cmd.join(timeoutSeconds, TimeUnit.SECONDS)
+                    val bytes = IOUtils.readFully(cmd.inputStream).toByteArray()
+                    String(bytes, Charsets.UTF_8)
+                } finally {
+                    runCatching { execSession.close() }
+                }
+            } catch (_: Exception) {
+                null
+            }
+        }
 
     private data class DisconnectSnapshot(
         val writer: PrintWriter?,

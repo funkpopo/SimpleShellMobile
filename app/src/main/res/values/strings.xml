@@ -62,6 +62,10 @@
     <string name="group_name">Group Name</string>
     <string name="delete_group_hint">Note: Deleting a group will not delete connections, only ungroup them.</string>
 
+    <!-- Resource Monitoring -->
+    <string name="resource_cpu">CPU</string>
+    <string name="resource_mem">MEM</string>
+
     <!-- Connection Edit Screen -->
     <string name="edit_connection">Edit Connection</string>
     <string name="new_connection">New Connection</string>

@@ -6,6 +6,7 @@ import com.example.simpleshell.data.local.database.entity.ConnectionEntity
 import com.example.simpleshell.data.local.database.entity.GroupEntity
 import com.example.simpleshell.data.repository.ConnectionRepository
 import com.example.simpleshell.data.repository.GroupRepository
+import com.example.simpleshell.ssh.ResourceMonitor
 import com.example.simpleshell.ssh.TerminalSessionManager
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Dispatchers
@@ -21,7 +22,8 @@ import javax.inject.Inject
 class HomeViewModel @Inject constructor(
     private val connectionRepository: ConnectionRepository,
     private val groupRepository: GroupRepository,
-    private val terminalSessionManager: TerminalSessionManager
+    private val terminalSessionManager: TerminalSessionManager,
+    private val resourceMonitor: ResourceMonitor
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(HomeUiState())
@@ -37,9 +39,17 @@ class HomeViewModel @Inject constructor(
             combine(
                 groupRepository.getAllGroups(),
                 connectionRepository.getAllConnections(),
-                terminalSessionManager.connectedSessions
-            ) { groups, connections, connectedSessions ->
-                Triple(groups, connections, connectedSessions.keys)
+                terminalSessionManager.connectedSessions,
+                resourceMonitor.stats
+            ) { groups, connections, connectedSessions, stats ->
+                HomeUiState(
+                    groups = groups,
+                    connections = connections,
+                    connectedTerminalConnectionIds = connectedSessions.keys,
+                    resourceStats = stats,
+                    isLoading = false,
+                    error = null
+                )
             }
                 .catch { e ->
                     _uiState.value = _uiState.value.copy(
@@ -47,14 +57,8 @@ class HomeViewModel @Inject constructor(
                         error = e.message
                     )
                 }
-                .collect { (groups, connections, connectedIds) ->
-                    _uiState.value = _uiState.value.copy(
-                        groups = groups,
-                        connections = connections,
-                        connectedTerminalConnectionIds = connectedIds,
-                        isLoading = false,
-                        error = null
-                    )
+                .collect { newState ->
+                    _uiState.value = newState
                 }
         }
     }

@@ -31,6 +31,7 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import com.example.simpleshell.R
 import com.example.simpleshell.data.local.database.entity.ConnectionEntity
 import com.example.simpleshell.data.local.database.entity.GroupEntity
+import com.example.simpleshell.ssh.ResourceStats
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -197,6 +198,7 @@ fun HomeScreen(
                                     ConnectionRow(
                                         connection = connection,
                                         isTerminalConnected = connection.id in uiState.connectedTerminalConnectionIds,
+                                        resourceStats = uiState.resourceStats[connection.id],
                                         onDisconnectTerminal = { viewModel.disconnectTerminal(connection.id) },
                                         onEdit = { onEditConnection(connection.id) },
                                         onDelete = { viewModel.deleteConnection(connection) },
@@ -238,6 +240,7 @@ fun HomeScreen(
                                         ConnectionRow(
                                             connection = connection,
                                             isTerminalConnected = connection.id in uiState.connectedTerminalConnectionIds,
+                                            resourceStats = uiState.resourceStats[connection.id],
                                             onDisconnectTerminal = { viewModel.disconnectTerminal(connection.id) },
                                             onEdit = { onEditConnection(connection.id) },
                                             onDelete = { viewModel.deleteConnection(connection) },
@@ -263,6 +266,7 @@ fun HomeScreen(
 private fun ConnectionRow(
     connection: ConnectionEntity,
     isTerminalConnected: Boolean,
+    resourceStats: ResourceStats?,
     onDisconnectTerminal: () -> Unit,
     onEdit: () -> Unit,
     onDelete: () -> Unit,
@@ -380,6 +384,69 @@ private fun ConnectionRow(
                     }
                 }
             }
+        )
+
+        if (isTerminalConnected && resourceStats != null) {
+            ResourceBars(stats = resourceStats)
+        }
+    }
+}
+
+@Composable
+private fun ResourceBars(stats: ResourceStats) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(start = 16.dp, end = 16.dp, bottom = 12.dp),
+        verticalArrangement = Arrangement.spacedBy(6.dp)
+    ) {
+        ResourceBarRow(
+            label = stringResource(R.string.resource_cpu),
+            percent = stats.cpuPercent,
+            detail = "%.1f%%".format(stats.cpuPercent)
+        )
+        ResourceBarRow(
+            label = stringResource(R.string.resource_mem),
+            percent = stats.memPercent,
+            detail = "%.1f%%  %s".format(stats.memPercent, stats.memDisplayString())
+        )
+    }
+}
+
+@Composable
+private fun ResourceBarRow(
+    label: String,
+    percent: Float,
+    detail: String
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        Text(
+            text = label,
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.width(32.dp)
+        )
+        LinearProgressIndicator(
+            progress = { (percent / 100f).coerceIn(0f, 1f) },
+            modifier = Modifier
+                .weight(1f)
+                .height(6.dp),
+            color = when {
+                percent > 90f -> MaterialTheme.colorScheme.error
+                percent > 70f -> MaterialTheme.colorScheme.tertiary
+                else -> MaterialTheme.colorScheme.primary
+            },
+            trackColor = MaterialTheme.colorScheme.surfaceVariant,
+        )
+        Text(
+            text = detail,
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            maxLines = 1
         )
     }
 }
