@@ -27,7 +27,7 @@ object AppModule {
             AppDatabase::class.java,
             "simpleshell_database"
         )
-            .fallbackToDestructiveMigration()
+            .fallbackToDestructiveMigrationFrom(1, 2)
             .build()
     }
 

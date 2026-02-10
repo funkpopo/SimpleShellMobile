@@ -68,6 +68,10 @@
     <string name="group_name">Group Name</string>
     <string name="delete_group_hint">Note: Deleting a group will not delete connections, only ungroup them.</string>
 
+    <!-- Notifications -->
+    <string name="notification_terminal_connected">Terminal connected</string>
+    <string name="notification_sftp_connected">SFTP connected</string>
+
     <!-- Resource Monitoring -->
     <string name="resource_cpu">CPU</string>
     <string name="resource_mem">MEM</string>

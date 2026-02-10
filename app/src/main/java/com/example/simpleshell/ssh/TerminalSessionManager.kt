@@ -1,6 +1,7 @@
 package com.example.simpleshell.ssh
 
 import android.content.Context
+import android.util.Log
 import com.example.simpleshell.domain.model.Connection
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.CoroutineScope
@@ -127,6 +128,11 @@ class TerminalSshSession internal constructor(
     private val outputBuffer = StringBuilder()
     private val disconnectGeneration = AtomicLong(0L)
 
+    companion object {
+        /** Cap the output buffer at ~512 KB to prevent OOM on long-running sessions. */
+        private const val MAX_OUTPUT_BUFFER_SIZE = 512 * 1024
+    }
+
     suspend fun connectIfNeeded(connection: Connection): Boolean = withContext(Dispatchers.IO) {
         require(connection.id == connectionId) {
             "Terminal session requested for id=$connectionId but got connection.id=${connection.id}"
@@ -211,8 +217,6 @@ class TerminalSshSession internal constructor(
             startReadingOutput()
 
             true
-        } catch (e: Exception) {
-            throw e
         } finally {
             // If we didn't commit the new resources into the shared state, close them here.
             val committed = synchronized(stateLock) { client === newClient && newClient != null }
@@ -245,6 +249,9 @@ class TerminalSshSession internal constructor(
                     if (read > 0) {
                         val text = String(buffer, 0, read)
                         outputBuffer.append(text)
+                        if (outputBuffer.length > MAX_OUTPUT_BUFFER_SIZE) {
+                            outputBuffer.delete(0, outputBuffer.length - MAX_OUTPUT_BUFFER_SIZE)
+                        }
                         _outputFlow.value = outputBuffer.toString()
                     } else if (read == -1) {
                         break
@@ -315,7 +322,8 @@ class TerminalSshSession internal constructor(
                 } finally {
                     runCatching { execSession.close() }
                 }
-            } catch (_: Exception) {
+            } catch (e: Exception) {
+                Log.w("TerminalSshSession", "executeExecCommand failed: ${e.message}")
                 null
             }
         }

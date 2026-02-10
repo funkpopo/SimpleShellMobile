@@ -77,7 +77,7 @@ fun TerminalScreen(
                 ConnectionForegroundService.EXTRA_TITLE,
                 uiState.connectionName.ifEmpty { "Terminal" }
             )
-            putExtra(ConnectionForegroundService.EXTRA_SUBTITLE, "Terminal 已连接")
+            putExtra(ConnectionForegroundService.EXTRA_SUBTITLE, "Terminal connected")
         }
         ContextCompat.startForegroundService(context, intent)
     }

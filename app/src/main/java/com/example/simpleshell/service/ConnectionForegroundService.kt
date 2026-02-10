@@ -115,29 +115,25 @@ class ConnectionForegroundService : Service() {
 
     override fun onTaskRemoved(rootIntent: Intent?) {
         // User swiped the app away from Recents. Close active SSH connections to avoid
-        // server-side resource waste.
-        disconnectAll()
+        // server-side resource waste. Run on IO to avoid ANR on the main thread.
+        serviceScope.launch(Dispatchers.IO) {
+            disconnectAll()
+        }
         stopForeground(STOP_FOREGROUND_REMOVE)
         stopSelf()
         super.onTaskRemoved(rootIntent)
     }
 
     override fun onDestroy() {
-        // If the service is being torn down, ensure connections are not leaked.
-        disconnectAll()
+        // Use a standalone thread so cleanup isn't tied to the serviceScope we're about to cancel.
+        Thread { disconnectAll() }.start()
         serviceScope.cancel()
         super.onDestroy()
     }
 
     private fun disconnectAll() {
-        try {
-            terminalSessionManager.disconnectAll()
-        } catch (_: Exception) {
-        }
-        try {
-            sftpManager.disconnect()
-        } catch (_: Exception) {
-        }
+        runCatching { terminalSessionManager.disconnectAll() }
+        runCatching { sftpManager.disconnect() }
     }
 
     private fun updateNotifications(snapshot: ConnectionsSnapshot) {
@@ -263,7 +259,7 @@ class ConnectionForegroundService : Service() {
         return NotificationCompat.Builder(this, CHANNEL_ID)
             .setSmallIcon(R.drawable.ic_notification_s)
             .setContentTitle(terminal.connectionName)
-            .setContentText("Terminal 已连接")
+            .setContentText(getString(R.string.notification_terminal_connected))
             .setContentIntent(openPendingIntent)
             .setOngoing(true)
             .setOnlyAlertOnce(true)
@@ -271,7 +267,7 @@ class ConnectionForegroundService : Service() {
             .setGroup(GROUP_KEY_CONNECTIONS)
             .addAction(
                 R.drawable.ic_notification_s,
-                "断开连接",
+                getString(R.string.disconnect),
                 disconnectPendingIntent
             )
             .build()
@@ -301,7 +297,7 @@ class ConnectionForegroundService : Service() {
         return NotificationCompat.Builder(this, CHANNEL_ID)
             .setSmallIcon(R.drawable.ic_notification_s)
             .setContentTitle("SFTP")
-            .setContentText("SFTP 已连接")
+            .setContentText(getString(R.string.notification_sftp_connected))
             .setContentIntent(openPendingIntent)
             .setOngoing(true)
             .setOnlyAlertOnce(true)

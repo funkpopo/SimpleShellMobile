@@ -51,6 +51,7 @@ class ResourceMonitor @Inject constructor(
         private const val MONITOR_COMMAND =
             "head -1 /proc/stat; sleep 1; head -1 /proc/stat; " +
             "awk '/MemTotal/{t=\$2}/MemAvailable/{a=\$2}END{print t-a,t}' /proc/meminfo"
+        private val WHITESPACE_REGEX = "\\s+".toRegex()
     }
 
     init {
@@ -118,7 +119,7 @@ class ResourceMonitor @Inject constructor(
                 0f
             }
 
-            val memParts = lines[2].trim().split("\\s+".toRegex())
+            val memParts = lines[2].trim().split(WHITESPACE_REGEX)
             if (memParts.size < 2) return null
             val memUsedKb = memParts[0].toLongOrNull() ?: return null
             val memTotalKb = memParts[1].toLongOrNull() ?: return null
@@ -136,7 +137,7 @@ class ResourceMonitor @Inject constructor(
     private data class CpuSnapshot(val total: Long, val idle: Long)
 
     private fun parseCpuLine(line: String): CpuSnapshot? {
-        val parts = line.trim().split("\\s+".toRegex())
+        val parts = line.trim().split(WHITESPACE_REGEX)
         if (parts.size < 5 || parts[0] != "cpu") return null
         val values = parts.drop(1).mapNotNull { it.toLongOrNull() }
         if (values.size < 4) return null

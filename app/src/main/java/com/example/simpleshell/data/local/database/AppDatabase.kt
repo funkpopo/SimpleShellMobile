@@ -17,7 +17,7 @@ import com.example.simpleshell.data.local.database.entity.SettingKvEntity
         CommandHistoryEntity::class
     ],
     version = 3,
-    exportSchema = false
+    exportSchema = true
 )
 abstract class AppDatabase : RoomDatabase() {
     abstract fun connectionDao(): ConnectionDao

@@ -28,6 +28,10 @@ class SftpViewModel @Inject constructor(
     val uiState: StateFlow<SftpUiState> = _uiState.asStateFlow()
     private val pathHistory = mutableListOf<String>()
 
+    companion object {
+        private const val MAX_PATH_HISTORY = 128
+    }
+
     init {
         observeConnectionState()
         connect()
@@ -119,6 +123,9 @@ class SftpViewModel @Inject constructor(
 
     fun navigateTo(file: SftpFile) {
         if (file.isDirectory) {
+            if (pathHistory.size >= MAX_PATH_HISTORY) {
+                pathHistory.removeAt(0)
+            }
             pathHistory.add(file.path)
             loadFiles(file.path)
         } else {
@@ -165,7 +172,8 @@ class SftpViewModel @Inject constructor(
     fun createDirectory(name: String) {
         viewModelScope.launch {
             try {
-                val newPath = "${_uiState.value.currentPath}/$name".replace("//", "/")
+                val currentPath = _uiState.value.currentPath.trimEnd('/')
+                val newPath = "$currentPath/$name"
                 sftpManager.createDirectory(newPath)
                 refresh()
             } catch (e: Exception) {
@@ -185,6 +193,8 @@ class SftpViewModel @Inject constructor(
 
     override fun onCleared() {
         super.onCleared()
-        sftpManager.disconnect()
+        // Run on a background thread since viewModelScope is already cancelled at this point
+        // and disconnect() may perform blocking I/O.
+        Thread { sftpManager.disconnect() }.start()
     }
 }

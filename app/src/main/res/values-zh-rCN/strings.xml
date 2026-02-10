@@ -69,6 +69,10 @@
     <string name="group_name">分组名称</string>
     <string name="delete_group_hint">提示：删除分组不会删除连接，只会取消分组。</string>
 
+    <!-- Notifications -->
+    <string name="notification_terminal_connected">Terminal 已连接</string>
+    <string name="notification_sftp_connected">SFTP 已连接</string>
+
     <!-- Resource Monitoring -->
     <string name="resource_cpu">CPU</string>
     <string name="resource_mem">内存</string>

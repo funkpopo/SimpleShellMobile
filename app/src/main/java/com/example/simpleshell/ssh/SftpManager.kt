@@ -21,6 +21,7 @@ import javax.inject.Singleton
 class SftpManager @Inject constructor(
     @ApplicationContext private val context: Context
 ) {
+    private val lock = Any()
     private var client: SSHClient? = null
     private var sftpClient: SFTPClient? = null
     private var tempKeyFile: File? = null
@@ -31,7 +32,7 @@ class SftpManager @Inject constructor(
     suspend fun connect(connection: Connection) = withContext(Dispatchers.IO) {
         try {
             disconnect()
-            client = SSHClient().apply {
+            val newClient = SSHClient().apply {
                 addHostKeyVerifier(PromiscuousVerifier())
                 connect(connection.host, connection.port)
 
@@ -42,7 +43,9 @@ class SftpManager @Inject constructor(
                     Connection.AuthType.KEY -> {
                         val rawKey = connection.privateKey ?: ""
                         val materialized = materializePrivateKey(context, rawKey)
-                        tempKeyFile = if (materialized.isTemp) materialized.file else null
+                        synchronized(lock) {
+                            tempKeyFile = if (materialized.isTemp) materialized.file else null
+                        }
 
                         val keyProvider = connection.privateKeyPassphrase?.let { passphrase ->
                             loadKeys(materialized.file.absolutePath, passphrase)
@@ -51,7 +54,11 @@ class SftpManager @Inject constructor(
                     }
                 }
             }
-            sftpClient = client?.newSFTPClient()
+            val newSftp = newClient.newSFTPClient()
+            synchronized(lock) {
+                client = newClient
+                sftpClient = newSftp
+            }
             _isConnected.value = true
         } catch (e: Exception) {
             _isConnected.value = false
@@ -98,15 +105,21 @@ class SftpManager @Inject constructor(
     }
 
     fun disconnect() {
-        _isConnected.value = false
+        val sftp: SFTPClient?
+        val ssh: SSHClient?
+        val keyFile: File?
 
-        val sftp = sftpClient
-        val ssh = client
-        val keyFile = tempKeyFile
+        synchronized(lock) {
+            _isConnected.value = false
 
-        sftpClient = null
-        client = null
-        tempKeyFile = null
+            sftp = sftpClient
+            ssh = client
+            keyFile = tempKeyFile
+
+            sftpClient = null
+            client = null
+            tempKeyFile = null
+        }
 
         // Don't let disconnect/close failures prevent the rest of the cleanup from happening.
         runCatching { sftp?.close() }
@@ -125,7 +138,7 @@ class SftpManager @Inject constructor(
     }
 
     val isConnected: Boolean
-        get() = client?.isConnected == true
+        get() = synchronized(lock) { client?.isConnected == true }
 
     private fun formatPermissions(mode: FileMode): String {
         val mask = mode.mask
