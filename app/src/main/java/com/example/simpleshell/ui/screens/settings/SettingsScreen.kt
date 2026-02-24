@@ -107,19 +107,11 @@ fun SettingsScreen(
         }
     }
 
-    val syncImportPicker = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.OpenDocument()
+    val configExportPicker = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.CreateDocument("application/json")
     ) { uri ->
         if (uri != null) {
-            viewModel.importSyncPackage(context.contentResolver, uri)
-        }
-    }
-
-    val syncExportPicker = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.CreateDocument("application/octet-stream")
-    ) { uri ->
-        if (uri != null) {
-            viewModel.exportSyncPackage(context.contentResolver, uri)
+            viewModel.exportPcConfig(context.contentResolver, uri)
         }
     }
 
@@ -375,8 +367,8 @@ fun SettingsScreen(
                 )
 
                 ListItem(
-                    headlineContent = { Text(stringResource(R.string.export_sync_package)) },
-                    supportingContent = { Text(stringResource(R.string.export_sync_package_desc)) },
+                    headlineContent = { Text(stringResource(R.string.export_pc_config)) },
+                    supportingContent = { Text(stringResource(R.string.export_pc_config_desc)) },
                     leadingContent = { Icon(Icons.Default.Folder, contentDescription = null) },
                     trailingContent = {
                         if (syncWorking) {
@@ -389,26 +381,7 @@ fun SettingsScreen(
                     modifier = Modifier
                         .fillMaxWidth()
                         .clickable(enabled = !isImporting && !syncWorking) {
-                            syncExportPicker.launch("simpleshell-sync-${System.currentTimeMillis()}.ssdb")
-                        }
-                )
-
-                ListItem(
-                    headlineContent = { Text(stringResource(R.string.import_sync_package)) },
-                    supportingContent = { Text(stringResource(R.string.import_sync_package_desc)) },
-                    leadingContent = { Icon(Icons.Default.Folder, contentDescription = null) },
-                    trailingContent = {
-                        if (syncWorking) {
-                            CircularProgressIndicator(
-                                modifier = Modifier.size(16.dp),
-                                strokeWidth = 2.dp
-                            )
-                        }
-                    },
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clickable(enabled = !isImporting && !syncWorking) {
-                            syncImportPicker.launch(arrayOf("application/octet-stream", "application/x-sqlite3", "*/*"))
+                            configExportPicker.launch("config-${System.currentTimeMillis()}.json")
                         }
                 )
             }
