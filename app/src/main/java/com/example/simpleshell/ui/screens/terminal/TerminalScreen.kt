@@ -357,6 +357,9 @@ fun TerminalScreen(
                                         isResetting = true
                                         inputBuffer = ""
                                         lastSentLength = 0
+                                        // Programmatic clear does not always trigger onValueChange(empty),
+                                        // so reset the guard here to avoid blocking subsequent typing.
+                                        isResetting = false
                                     }
                                 ),
                                 singleLine = true
