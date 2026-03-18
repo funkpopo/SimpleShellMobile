@@ -78,12 +78,19 @@ class MainActivity : AppCompatActivity() {
                     modifier = Modifier.fillMaxSize(),
                     color = MaterialTheme.colorScheme.background
                 ) {
+                    if (mainUiState.isLoading) {
+                        // Wait for preferences to load
+                        return@Surface
+                    }
+
                     val context = LocalContext.current
                     val isBiometricAvailable = remember { BiometricHelper.isBiometricAvailable(context) }
-                    var isAuthenticated by remember { mutableStateOf(!isBiometricAvailable) }
+                    val shouldRequireUnlock = mainUiState.fingerprintUnlockEnabled && isBiometricAvailable
+                    // Only require authentication on app start if the setting is enabled
+                    var isAuthenticated by remember { mutableStateOf(!shouldRequireUnlock) }
 
-                    LaunchedEffect(isBiometricAvailable) {
-                        if (isBiometricAvailable && !isAuthenticated) {
+                    LaunchedEffect(Unit) {
+                        if (shouldRequireUnlock && !isAuthenticated) {
                             BiometricHelper.showBiometricPrompt(
                                 activity = context as FragmentActivity,
                                 onSuccess = { isAuthenticated = true },

@@ -14,6 +14,7 @@ data class SettingsUiState(
     val webDavUrl: String = "",
     val webDavUsername: String = "",
     val webDavPassword: String = "",
+    val fingerprintUnlockEnabled: Boolean = false,
     val updateCheckState: UpdateCheckState = UpdateCheckState.Idle,
     val importState: ImportState = ImportState.Idle,
     val syncState: SyncState = SyncState.Idle

@@ -35,6 +35,7 @@ class UserPreferencesRepository @Inject constructor(
         val WEBDAV_URL: Preferences.Key<String> = stringPreferencesKey("webdav_url")
         val WEBDAV_USERNAME: Preferences.Key<String> = stringPreferencesKey("webdav_username")
         val WEBDAV_PASSWORD: Preferences.Key<String> = stringPreferencesKey("webdav_password")
+        val FINGERPRINT_UNLOCK_ENABLED: Preferences.Key<Boolean> = booleanPreferencesKey("fingerprint_unlock_enabled")
     }
 
     val preferences: Flow<UserPreferences> = context.userPreferencesDataStore.data
@@ -47,7 +48,8 @@ class UserPreferencesRepository @Inject constructor(
                 terminalFontScale = prefs[Keys.TERMINAL_FONT_SCALE] ?: 1.0f,
                 webDavUrl = prefs[Keys.WEBDAV_URL] ?: "",
                 webDavUsername = prefs[Keys.WEBDAV_USERNAME] ?: "",
-                webDavPassword = prefs[Keys.WEBDAV_PASSWORD] ?: ""
+                webDavPassword = prefs[Keys.WEBDAV_PASSWORD] ?: "",
+                fingerprintUnlockEnabled = prefs[Keys.FINGERPRINT_UNLOCK_ENABLED] ?: false
             )
         }
 
@@ -96,6 +98,12 @@ class UserPreferencesRepository @Inject constructor(
     suspend fun setWebDavPassword(password: String) {
         context.userPreferencesDataStore.edit { prefs ->
             prefs[Keys.WEBDAV_PASSWORD] = password
+        }
+    }
+
+    suspend fun setFingerprintUnlockEnabled(enabled: Boolean) {
+        context.userPreferencesDataStore.edit { prefs ->
+            prefs[Keys.FINGERPRINT_UNLOCK_ENABLED] = enabled
         }
     }
 

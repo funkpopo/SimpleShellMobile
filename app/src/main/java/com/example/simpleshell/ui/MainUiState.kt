@@ -8,6 +8,8 @@ data class MainUiState(
     val themeMode: ThemeMode = ThemeMode.SYSTEM,
     val dynamicColor: Boolean = true,
     val themeColor: ThemeColor = ThemeColor.PURPLE,
-    val language: Language = Language.SYSTEM
+    val language: Language = Language.SYSTEM,
+    val fingerprintUnlockEnabled: Boolean = false,
+    val isLoading: Boolean = true
 )
 

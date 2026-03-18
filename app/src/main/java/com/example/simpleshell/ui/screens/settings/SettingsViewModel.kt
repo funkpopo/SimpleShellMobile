@@ -50,7 +50,8 @@ class SettingsViewModel @Inject constructor(
                         language = prefs.language,
                         webDavUrl = prefs.webDavUrl,
                         webDavUsername = prefs.webDavUsername,
-                        webDavPassword = prefs.webDavPassword
+                        webDavPassword = prefs.webDavPassword,
+                        fingerprintUnlockEnabled = prefs.fingerprintUnlockEnabled
                     )
                 }
         }
@@ -95,6 +96,12 @@ class SettingsViewModel @Inject constructor(
     fun setWebDavPassword(password: String) {
         viewModelScope.launch {
             userPreferencesRepository.setWebDavPassword(password)
+        }
+    }
+
+    fun setFingerprintUnlockEnabled(enabled: Boolean) {
+        viewModelScope.launch {
+            userPreferencesRepository.setFingerprintUnlockEnabled(enabled)
         }
     }
 

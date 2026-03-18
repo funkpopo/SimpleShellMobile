@@ -17,5 +17,6 @@ data class UserPreferences(
     val terminalFontScale: Float = 1.0f,
     val webDavUrl: String = "",
     val webDavUsername: String = "",
-    val webDavPassword: String = ""
+    val webDavPassword: String = "",
+    val fingerprintUnlockEnabled: Boolean = false
 )

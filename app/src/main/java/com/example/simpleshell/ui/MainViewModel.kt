@@ -23,14 +23,16 @@ class MainViewModel @Inject constructor(
             userPreferencesRepository.preferences
                 .catch {
                     // If prefs are corrupted/unreadable, fall back to defaults.
-                    _uiState.value = MainUiState()
+                    _uiState.value = MainUiState(isLoading = false)
                 }
                 .collect { prefs ->
                     _uiState.value = _uiState.value.copy(
                         themeMode = prefs.themeMode,
                         dynamicColor = prefs.dynamicColor,
                         themeColor = prefs.themeColor,
-                        language = prefs.language
+                        language = prefs.language,
+                        fingerprintUnlockEnabled = prefs.fingerprintUnlockEnabled,
+                        isLoading = false
                     )
                 }
         }

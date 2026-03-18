@@ -31,6 +31,7 @@ import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material.icons.filled.Language
+import androidx.compose.material.icons.filled.Fingerprint
 import androidx.compose.material.icons.filled.Folder
 import androidx.compose.material.icons.filled.Palette
 import androidx.compose.material.icons.filled.Person
@@ -73,6 +74,7 @@ import com.example.simpleshell.data.remote.ReleaseInfo
 import com.example.simpleshell.domain.model.Language
 import com.example.simpleshell.domain.model.ThemeColor
 import com.example.simpleshell.domain.model.ThemeMode
+import com.example.simpleshell.utils.BiometricHelper
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -349,6 +351,29 @@ fun SettingsScreen(
                         }
                     )
                 }
+            }
+
+            item {
+                val isBiometricAvailable = remember { BiometricHelper.isBiometricAvailable(context) }
+                ListItem(
+                    headlineContent = { Text(stringResource(R.string.fingerprint_unlock)) },
+                    supportingContent = { 
+                        Text(
+                            if (isBiometricAvailable) stringResource(R.string.fingerprint_unlock_desc)
+                            else stringResource(R.string.fingerprint_unlock_not_supported)
+                        ) 
+                    },
+                    leadingContent = {
+                        Icon(Icons.Default.Fingerprint, contentDescription = null)
+                    },
+                    trailingContent = {
+                        Switch(
+                            checked = uiState.fingerprintUnlockEnabled && isBiometricAvailable,
+                            onCheckedChange = viewModel::setFingerprintUnlockEnabled,
+                            enabled = isBiometricAvailable
+                        )
+                    }
+                )
             }
 
             item {

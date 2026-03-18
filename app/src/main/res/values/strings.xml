@@ -9,6 +9,9 @@
     <string name="dynamic_color">Dynamic Color (Android 12+)</string>
     <string name="dynamic_color_desc">Generate colors from system wallpaper</string>
     <string name="theme_color">Theme Color</string>
+    <string name="fingerprint_unlock">Fingerprint Unlock</string>
+    <string name="fingerprint_unlock_desc">Require fingerprint authentication when opening the app</string>
+    <string name="fingerprint_unlock_not_supported">Not supported on this device</string>
     <string name="data">Data</string>
     <string name="import_pc_config">Import PC config.json</string>
     <string name="import_pc_config_desc">Import connections/groups from SimpleShell (PC) config.json</string>
