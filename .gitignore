@@ -66,3 +66,5 @@ ehthumbs.db
 # Misc
 todo.md
 *.hprof
+
+com.example.simpleshell.data.local.database.AppDatabase/
