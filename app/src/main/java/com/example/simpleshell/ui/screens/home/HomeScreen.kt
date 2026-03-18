@@ -1,5 +1,7 @@
 package com.example.simpleshell.ui.screens.home
 
+import androidx.compose.animation.togetherWith
+import androidx.compose.animation.animateContentSize
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
@@ -131,116 +133,83 @@ fun HomeScreen(
                 .fillMaxSize()
                 .padding(paddingValues)
         ) {
-            when {
-                uiState.isLoading -> {
-                    CircularProgressIndicator(
-                        modifier = Modifier.align(Alignment.Center)
-                    )
+            androidx.compose.animation.AnimatedContent(
+                targetState = uiState,
+                label = "HomeContentAnimation",
+                transitionSpec = {
+                    androidx.compose.animation.fadeIn(animationSpec = androidx.compose.animation.core.tween(300)) togetherWith androidx.compose.animation.fadeOut(animationSpec = androidx.compose.animation.core.tween(300))
                 }
-                uiState.error != null -> {
-                    Text(
-                        text = stringResource(R.string.error_message, uiState.error ?: ""),
-                        color = MaterialTheme.colorScheme.error,
-                        modifier = Modifier
-                            .align(Alignment.Center)
-                            .padding(16.dp)
-                    )
-                }
-                uiState.connections.isEmpty() && uiState.groups.isEmpty() -> {
-                    Column(
-                        modifier = Modifier.align(Alignment.Center),
-                        horizontalAlignment = Alignment.CenterHorizontally
-                    ) {
-                        Text(
-                            text = stringResource(R.string.no_connections),
-                            style = MaterialTheme.typography.bodyLarge
-                        )
-                        Spacer(modifier = Modifier.height(8.dp))
-                        Text(
-                            text = stringResource(R.string.tap_to_add_connection),
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
+            ) { state ->
+                when {
+                    state.isLoading -> {
+                        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                            CircularProgressIndicator()
+                        }
                     }
-                }
-                else -> {
-                    val knownGroupIds = remember(uiState.groups) { uiState.groups.map { it.id }.toSet() }
-                    val ungroupedConnections = remember(uiState.connections, knownGroupIds) {
-                        uiState.connections.filter { it.groupId == null || it.groupId !in knownGroupIds }
+                    state.error != null -> {
+                        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                            Text(
+                                text = stringResource(R.string.error_message, state.error ?: ""),
+                                color = MaterialTheme.colorScheme.error,
+                                modifier = Modifier.padding(16.dp)
+                            )
+                        }
                     }
-                    val connectionsByGroup = remember(uiState.connections, knownGroupIds) {
-                        uiState.connections
-                            .filter { it.groupId != null && it.groupId in knownGroupIds }
-                            // Safe because of the filter above; avoid `!!` for better readability and tooling support.
-                            .groupBy { requireNotNull(it.groupId) { "groupId was null after filtering" } }
-                    }
-
-                    LazyColumn(
-                        modifier = Modifier.fillMaxSize(),
-                        contentPadding = PaddingValues(16.dp),
-                        verticalArrangement = Arrangement.spacedBy(12.dp)
-                    ) {
-                        if (ungroupedConnections.isNotEmpty()) {
-                            val isUngroupedExpanded = isGroupExpanded(ungroupedGroupId)
-                            item(key = "header_ungrouped") {
-                                GroupHeader(
-                                    title = stringResource(R.string.ungrouped),
-                                    subtitle = stringResource(R.string.connections_count, ungroupedConnections.size),
-                                    isEditable = false,
-                                    isExpanded = isUngroupedExpanded,
-                                    onToggleExpanded = { toggleGroupExpanded(ungroupedGroupId) },
-                                    onRename = {},
-                                    onDelete = {}
+                    state.connections.isEmpty() && state.groups.isEmpty() -> {
+                        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                            Column(
+                                horizontalAlignment = Alignment.CenterHorizontally
+                            ) {
+                                Text(
+                                    text = stringResource(R.string.no_connections),
+                                    style = MaterialTheme.typography.bodyLarge
+                                )
+                                Spacer(modifier = Modifier.height(8.dp))
+                                Text(
+                                    text = stringResource(R.string.tap_to_add_connection),
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
                             }
-                            if (isUngroupedExpanded) {
-                                items(ungroupedConnections, key = { "conn_${it.id}" }) { connection ->
-                                    ConnectionRow(
-                                        connection = connection,
-                                        isTerminalConnected = connection.id in uiState.connectedTerminalConnectionIds,
-                                        resourceStats = uiState.resourceStats[connection.id],
-                                        onDisconnectTerminal = { viewModel.disconnectTerminal(connection.id) },
-                                        onEdit = { onEditConnection(connection.id) },
-                                        onDelete = { viewModel.deleteConnection(connection) },
-                                        onTerminal = { onConnectTerminal(connection.id) },
-                                        onSftp = { onConnectSftp(connection.id) }
-                                    )
-                                }
-                            }
-                            item(key = "spacer_ungrouped") { Spacer(modifier = Modifier.height(8.dp)) }
+                        }
+                    }
+                    else -> {
+                        val knownGroupIds = remember(state.groups) { state.groups.map { it.id }.toSet() }
+                        val ungroupedConnections = remember(state.connections, knownGroupIds) {
+                            state.connections.filter { it.groupId == null || it.groupId !in knownGroupIds }
+                        }
+                        val connectionsByGroup = remember(state.connections, knownGroupIds) {
+                            state.connections
+                                .filter { it.groupId != null && it.groupId in knownGroupIds }
+                                .groupBy { requireNotNull(it.groupId) { "groupId was null after filtering" } }
                         }
 
-                        uiState.groups.forEach { group ->
-                            val groupConnections = connectionsByGroup[group.id] ?: emptyList()
-                            val isExpanded = isGroupExpanded(group.id)
-                            item(key = "header_group_${group.id}") {
-                                GroupHeader(
-                                    title = group.name,
-                                    subtitle = stringResource(R.string.connections_count, groupConnections.size),
-                                    isEditable = true,
-                                    isExpanded = isExpanded,
-                                    onToggleExpanded = { toggleGroupExpanded(group.id) },
-                                    onRename = { renameGroupTarget = group },
-                                    onDelete = { deleteGroupTarget = group }
-                                )
-                            }
-
-                            if (isExpanded) {
-                                if (groupConnections.isEmpty()) {
-                                    item(key = "empty_group_${group.id}") {
-                                        Text(
-                                            text = stringResource(R.string.no_connections_in_group),
-                                            style = MaterialTheme.typography.bodySmall,
-                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                            modifier = Modifier.padding(start = 16.dp, bottom = 8.dp)
-                                        )
-                                    }
-                                } else {
-                                    items(groupConnections, key = { "conn_${it.id}" }) { connection ->
+                        LazyColumn(
+                            modifier = Modifier.fillMaxSize(),
+                            contentPadding = PaddingValues(16.dp),
+                            verticalArrangement = Arrangement.spacedBy(12.dp)
+                        ) {
+                            if (ungroupedConnections.isNotEmpty()) {
+                                val isUngroupedExpanded = isGroupExpanded(ungroupedGroupId)
+                                item(key = "header_ungrouped") {
+                                    GroupHeader(
+                                        modifier = Modifier.animateItem(),
+                                        title = stringResource(R.string.ungrouped),
+                                        subtitle = stringResource(R.string.connections_count, ungroupedConnections.size),
+                                        isEditable = false,
+                                        isExpanded = isUngroupedExpanded,
+                                        onToggleExpanded = { toggleGroupExpanded(ungroupedGroupId) },
+                                        onRename = {},
+                                        onDelete = {}
+                                    )
+                                }
+                                if (isUngroupedExpanded) {
+                                    items(ungroupedConnections, key = { "conn_${it.id}" }) { connection ->
                                         ConnectionRow(
+                                            modifier = Modifier.animateItem(),
                                             connection = connection,
-                                            isTerminalConnected = connection.id in uiState.connectedTerminalConnectionIds,
-                                            resourceStats = uiState.resourceStats[connection.id],
+                                            isTerminalConnected = connection.id in state.connectedTerminalConnectionIds,
+                                            resourceStats = state.resourceStats[connection.id],
                                             onDisconnectTerminal = { viewModel.disconnectTerminal(connection.id) },
                                             onEdit = { onEditConnection(connection.id) },
                                             onDelete = { viewModel.deleteConnection(connection) },
@@ -249,10 +218,55 @@ fun HomeScreen(
                                         )
                                     }
                                 }
+                                item(key = "spacer_ungrouped") { Spacer(modifier = Modifier.animateItem().height(8.dp)) }
                             }
 
-                            item(key = "spacer_group_${group.id}") {
-                                Spacer(modifier = Modifier.height(8.dp))
+                            state.groups.forEach { group ->
+                                val groupConnections = connectionsByGroup[group.id] ?: emptyList()
+                                val isExpanded = isGroupExpanded(group.id)
+                                item(key = "header_group_${group.id}") {
+                                    GroupHeader(
+                                        modifier = Modifier.animateItem(),
+                                        title = group.name,
+                                        subtitle = stringResource(R.string.connections_count, groupConnections.size),
+                                        isEditable = true,
+                                        isExpanded = isExpanded,
+                                        onToggleExpanded = { toggleGroupExpanded(group.id) },
+                                        onRename = { renameGroupTarget = group },
+                                        onDelete = { deleteGroupTarget = group }
+                                    )
+                                }
+
+                                if (isExpanded) {
+                                    if (groupConnections.isEmpty()) {
+                                        item(key = "empty_group_${group.id}") {
+                                            Text(
+                                                text = stringResource(R.string.no_connections_in_group),
+                                                style = MaterialTheme.typography.bodySmall,
+                                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                                modifier = Modifier.animateItem().padding(start = 16.dp, bottom = 8.dp)
+                                            )
+                                        }
+                                    } else {
+                                        items(groupConnections, key = { "conn_${it.id}" }) { connection ->
+                                            ConnectionRow(
+                                                modifier = Modifier.animateItem(),
+                                                connection = connection,
+                                                isTerminalConnected = connection.id in state.connectedTerminalConnectionIds,
+                                                resourceStats = state.resourceStats[connection.id],
+                                                onDisconnectTerminal = { viewModel.disconnectTerminal(connection.id) },
+                                                onEdit = { onEditConnection(connection.id) },
+                                                onDelete = { viewModel.deleteConnection(connection) },
+                                                onTerminal = { onConnectTerminal(connection.id) },
+                                                onSftp = { onConnectSftp(connection.id) }
+                                            )
+                                        }
+                                    }
+                                }
+
+                                item(key = "spacer_group_${group.id}") {
+                                    Spacer(modifier = Modifier.animateItem().height(8.dp))
+                                }
                             }
                         }
                     }
@@ -264,6 +278,7 @@ fun HomeScreen(
 
 @Composable
 private fun ConnectionRow(
+    modifier: Modifier = Modifier,
     connection: ConnectionEntity,
     isTerminalConnected: Boolean,
     resourceStats: ResourceStats?,
@@ -300,7 +315,9 @@ private fun ConnectionRow(
     }
 
     Card(
-        modifier = Modifier.fillMaxWidth(),
+        modifier = modifier
+            .fillMaxWidth()
+            .animateContentSize(),
         elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
     ) {
         ListItem(
@@ -453,6 +470,7 @@ private fun ResourceBarRow(
 
 @Composable
 private fun GroupHeader(
+    modifier: Modifier = Modifier,
     title: String,
     subtitle: String,
     isEditable: Boolean,
@@ -462,7 +480,7 @@ private fun GroupHeader(
     onDelete: () -> Unit
 ) {
     Row(
-        modifier = Modifier
+        modifier = modifier
             .fillMaxWidth()
             .clickable(onClick = onToggleExpanded)
             .padding(horizontal = 8.dp, vertical = 4.dp),

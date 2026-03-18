@@ -135,6 +135,8 @@ fun TerminalScreen(
     // Keep lambdas up-to-date inside pointerInput without restarting the whole gesture detector.
     val onSetFontScale by rememberUpdatedState<(Float) -> Unit> { viewModel.setFontScale(it) }
     val currentFontScale by rememberUpdatedState(fontScale)
+    
+    var showSnippets by remember { mutableStateOf(false) }
 
     Scaffold(
         topBar = {
@@ -369,10 +371,21 @@ fun TerminalScreen(
 
                     // Shortcut panel at the bottom
                     ShortcutPanel(
-                        onSendInput = { input -> viewModel.sendInput(input) }
+                        onSendInput = { input -> viewModel.sendInput(input) },
+                        onOpenSnippets = { showSnippets = true }
                     )
                 }
             }
+        }
+        
+        if (showSnippets) {
+            SnippetManagerBottomSheet(
+                onDismiss = { showSnippets = false },
+                onSnippetSelected = { content ->
+                    // Send the snippet content to the terminal
+                    viewModel.sendInput(content + "\n")
+                }
+            )
         }
     }
 }

@@ -108,7 +108,7 @@ class SftpViewModel @Inject constructor(
             try {
                 val files = sftpManager.listFiles(path)
                 _uiState.value = _uiState.value.copy(
-                    files = files,
+                    files = sortFiles(files, _uiState.value.sortOption, _uiState.value.sortAscending),
                     currentPath = path,
                     isLoading = false
                 )
@@ -119,6 +119,32 @@ class SftpViewModel @Inject constructor(
                 )
             }
         }
+    }
+
+    fun setSortOption(option: SortOption) {
+        val ascending = if (_uiState.value.sortOption == option) {
+            !_uiState.value.sortAscending
+        } else {
+            true
+        }
+        _uiState.value = _uiState.value.copy(
+            sortOption = option,
+            sortAscending = ascending,
+            files = sortFiles(_uiState.value.files, option, ascending)
+        )
+    }
+
+    private fun sortFiles(files: List<SftpFile>, option: SortOption, ascending: Boolean): List<SftpFile> {
+        val comparator = when (option) {
+            SortOption.NAME -> compareBy<SftpFile> { it.name.lowercase() }
+            SortOption.SIZE -> compareBy { it.size }
+            SortOption.MODIFIED_TIME -> compareBy { it.modifiedTime }
+        }
+        
+        val finalComparator = if (ascending) comparator else comparator.reversed()
+        
+        // Always keep directories at the top
+        return files.sortedWith(compareBy<SftpFile> { !it.isDirectory }.then(finalComparator))
     }
 
     fun navigateTo(file: SftpFile) {
@@ -182,6 +208,135 @@ class SftpViewModel @Inject constructor(
                 )
             }
         }
+    }
+
+    fun uploadFile(uri: android.net.Uri, context: android.content.Context) {
+        viewModelScope.launch {
+            _uiState.value = _uiState.value.copy(isLoading = true, error = null)
+            try {
+                // Copy URI to temp file
+                val tempFile = java.io.File(context.cacheDir, getFileName(context, uri) ?: "upload_tmp")
+                context.contentResolver.openInputStream(uri)?.use { input ->
+                    tempFile.outputStream().use { output ->
+                        input.copyTo(output)
+                    }
+                }
+                
+                val currentPath = _uiState.value.currentPath.trimEnd('/')
+                val remotePath = "$currentPath/${tempFile.name}"
+                sftpManager.uploadFile(tempFile.absolutePath, remotePath)
+                tempFile.delete()
+                
+                refresh()
+            } catch (e: Exception) {
+                _uiState.value = _uiState.value.copy(
+                    isLoading = false,
+                    error = "Failed to upload file: ${e.message}"
+                )
+            }
+        }
+    }
+
+    private fun getFileName(context: android.content.Context, uri: android.net.Uri): String? {
+        var result: String? = null
+        if (uri.scheme == "content") {
+            context.contentResolver.query(uri, null, null, null, null)?.use { cursor ->
+                if (cursor.moveToFirst()) {
+                    val index = cursor.getColumnIndex(android.provider.OpenableColumns.DISPLAY_NAME)
+                    if (index != -1) {
+                        result = cursor.getString(index)
+                    }
+                }
+            }
+        }
+        if (result == null) {
+            result = uri.path?.let { path ->
+                val cut = path.lastIndexOf('/')
+                if (cut != -1) path.substring(cut + 1) else path
+            }
+        }
+        return result
+    }
+
+    fun downloadFile(file: SftpFile, destUri: android.net.Uri, context: android.content.Context) {
+        viewModelScope.launch {
+            _uiState.value = _uiState.value.copy(isLoading = true, error = null)
+            try {
+                val tempFile = java.io.File(context.cacheDir, file.name)
+                sftpManager.downloadFile(file.path, tempFile.absolutePath)
+                
+                context.contentResolver.openOutputStream(destUri)?.use { output ->
+                    tempFile.inputStream().use { input ->
+                        input.copyTo(output)
+                    }
+                }
+                tempFile.delete()
+                _uiState.value = _uiState.value.copy(isLoading = false)
+            } catch (e: Exception) {
+                _uiState.value = _uiState.value.copy(
+                    isLoading = false,
+                    error = "Failed to download file: ${e.message}"
+                )
+            }
+        }
+    }
+
+    fun openEditor(file: SftpFile, context: android.content.Context) {
+        viewModelScope.launch {
+            _uiState.value = _uiState.value.copy(isLoading = true, error = null)
+            try {
+                if (file.size > 1024 * 1024) { // 1MB limit
+                    throw Exception("File is too large to edit")
+                }
+                val tempFile = java.io.File(context.cacheDir, file.name)
+                sftpManager.downloadFile(file.path, tempFile.absolutePath)
+                val content = tempFile.readText()
+                tempFile.delete()
+                
+                _uiState.value = _uiState.value.copy(
+                    isLoading = false,
+                    editingFile = file,
+                    editingFileContent = content
+                )
+            } catch (e: Exception) {
+                _uiState.value = _uiState.value.copy(
+                    isLoading = false,
+                    error = "Failed to open editor: ${e.message}"
+                )
+            }
+        }
+    }
+    
+    fun saveEditedFile(content: String, context: android.content.Context) {
+        val file = _uiState.value.editingFile ?: return
+        viewModelScope.launch {
+            _uiState.value = _uiState.value.copy(isLoading = true, error = null)
+            try {
+                val tempFile = java.io.File(context.cacheDir, file.name)
+                tempFile.writeText(content)
+                sftpManager.uploadFile(tempFile.absolutePath, file.path)
+                tempFile.delete()
+                
+                _uiState.value = _uiState.value.copy(
+                    isLoading = false,
+                    editingFile = null,
+                    editingFileContent = null
+                )
+                refresh()
+            } catch (e: Exception) {
+                _uiState.value = _uiState.value.copy(
+                    isLoading = false,
+                    error = "Failed to save file: ${e.message}"
+                )
+            }
+        }
+    }
+    
+    fun closeEditor() {
+        _uiState.value = _uiState.value.copy(
+            editingFile = null,
+            editingFileContent = null
+        )
     }
 
     fun reconnect() {

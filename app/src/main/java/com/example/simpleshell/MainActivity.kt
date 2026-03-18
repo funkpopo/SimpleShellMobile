@@ -22,6 +22,23 @@ import com.example.simpleshell.domain.model.ThemeMode
 import com.example.simpleshell.ui.MainViewModel
 import com.example.simpleshell.ui.navigation.NavGraph
 import com.example.simpleshell.ui.theme.SimpleShellTheme
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.height
+import androidx.compose.material3.Button
+import androidx.compose.material3.Text
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Lock
+import androidx.compose.material3.Icon
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.unit.dp
+import com.example.simpleshell.utils.BiometricHelper
+import androidx.compose.ui.platform.LocalContext
+import androidx.fragment.app.FragmentActivity
 import dagger.hilt.android.AndroidEntryPoint
 
 @AndroidEntryPoint
@@ -61,8 +78,51 @@ class MainActivity : AppCompatActivity() {
                     modifier = Modifier.fillMaxSize(),
                     color = MaterialTheme.colorScheme.background
                 ) {
-                    val navController = rememberNavController()
-                    NavGraph(navController = navController)
+                    val context = LocalContext.current
+                    val isBiometricAvailable = remember { BiometricHelper.isBiometricAvailable(context) }
+                    var isAuthenticated by remember { mutableStateOf(!isBiometricAvailable) }
+
+                    LaunchedEffect(isBiometricAvailable) {
+                        if (isBiometricAvailable && !isAuthenticated) {
+                            BiometricHelper.showBiometricPrompt(
+                                activity = context as FragmentActivity,
+                                onSuccess = { isAuthenticated = true },
+                                onError = { _, _ -> },
+                                onFailed = { }
+                            )
+                        }
+                    }
+
+                    if (isAuthenticated) {
+                        val navController = rememberNavController()
+                        NavGraph(navController = navController)
+                    } else {
+                        Box(
+                            modifier = Modifier.fillMaxSize(),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                Icon(
+                                    imageVector = Icons.Default.Lock,
+                                    contentDescription = "Locked",
+                                    modifier = Modifier.height(64.dp)
+                                )
+                                Spacer(modifier = Modifier.height(16.dp))
+                                Text("App is locked")
+                                Spacer(modifier = Modifier.height(16.dp))
+                                Button(onClick = {
+                                    BiometricHelper.showBiometricPrompt(
+                                        activity = context as FragmentActivity,
+                                        onSuccess = { isAuthenticated = true },
+                                        onError = { _, _ -> },
+                                        onFailed = { }
+                                    )
+                                }) {
+                                    Text("Unlock")
+                                }
+                            }
+                        }
+                    }
                 }
             }
         }

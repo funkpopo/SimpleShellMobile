@@ -25,6 +25,7 @@ import androidx.core.content.ContextCompat
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.example.simpleshell.service.ConnectionForegroundService
 import com.example.simpleshell.domain.model.SftpFile
+import com.example.simpleshell.ui.screens.sftp.SortOption
 import com.example.simpleshell.ui.util.POST_NOTIFICATIONS_PERMISSION
 import java.text.SimpleDateFormat
 import java.util.*
@@ -38,6 +39,7 @@ fun SftpScreen(
     val uiState by viewModel.uiState.collectAsState()
     var showNewFolderDialog by remember { mutableStateOf(false) }
     var showDeleteDialog by remember { mutableStateOf<SftpFile?>(null) }
+    var showSortMenu by remember { mutableStateOf(false) }
     val context = LocalContext.current
     var askedNotificationPermission by remember { mutableStateOf(false) }
 
@@ -58,6 +60,24 @@ fun SftpScreen(
         if (granted && uiState.isConnected) {
             startConnectionService()
         }
+    }
+
+    val uploadLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.GetContent()
+    ) { uri ->
+        uri?.let { viewModel.uploadFile(it, context) }
+    }
+
+    var fileToDownload by remember { mutableStateOf<SftpFile?>(null) }
+    val downloadLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.CreateDocument("*/*")
+    ) { uri ->
+        uri?.let { destUri ->
+            fileToDownload?.let { file ->
+                viewModel.downloadFile(file, destUri, context)
+            }
+        }
+        fileToDownload = null
     }
 
     LaunchedEffect(uiState.isConnected, uiState.connectionName) {
@@ -83,7 +103,9 @@ fun SftpScreen(
     }
 
     BackHandler(enabled = uiState.isConnected) {
-        if (!viewModel.navigateUp()) {
+        if (uiState.editingFile != null) {
+            viewModel.closeEditor()
+        } else if (!viewModel.navigateUp()) {
             onNavigateBack()
         }
     }
@@ -119,6 +141,76 @@ fun SftpScreen(
         )
     }
 
+    uiState.selectedFile?.let { file ->
+        AlertDialog(
+            onDismissRequest = { viewModel.clearSelectedFile() },
+            title = { Text(file.name) },
+            text = { Text("What would you like to do with this file?") },
+            confirmButton = {
+                TextButton(onClick = {
+                    fileToDownload = file
+                    viewModel.clearSelectedFile()
+                    // Start download
+                    downloadLauncher.launch(file.name)
+                }) {
+                    Text("Download")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = {
+                    viewModel.clearSelectedFile()
+                    // Open editor
+                    viewModel.openEditor(file, context)
+                }) {
+                    Text("Edit")
+                }
+            }
+        )
+    }
+
+    if (uiState.editingFile != null) {
+        var editedContent by remember(uiState.editingFileContent) { mutableStateOf(uiState.editingFileContent ?: "") }
+        
+        Scaffold(
+            topBar = {
+                TopAppBar(
+                    title = { Text("Editing: ${uiState.editingFile!!.name}") },
+                    navigationIcon = {
+                        IconButton(onClick = { viewModel.closeEditor() }) {
+                            Icon(Icons.AutoMirrored.Filled.ArrowBack, "Close")
+                        }
+                    },
+                    actions = {
+                        IconButton(onClick = { viewModel.saveEditedFile(editedContent, context) }) {
+                            Icon(Icons.Default.Save, "Save")
+                        }
+                    }
+                )
+            }
+        ) { paddingValues ->
+            Box(modifier = Modifier.fillMaxSize().padding(paddingValues)) {
+                TextField(
+                    value = editedContent,
+                    onValueChange = { editedContent = it },
+                    modifier = Modifier.fillMaxSize(),
+                    textStyle = MaterialTheme.typography.bodyMedium.copy(
+                        fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace
+                    ),
+                    colors = TextFieldDefaults.colors(
+                        focusedContainerColor = MaterialTheme.colorScheme.surface,
+                        unfocusedContainerColor = MaterialTheme.colorScheme.surface,
+                        focusedIndicatorColor = androidx.compose.ui.graphics.Color.Transparent,
+                        unfocusedIndicatorColor = androidx.compose.ui.graphics.Color.Transparent
+                    )
+                )
+                if (uiState.isLoading) {
+                    LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
+                }
+            }
+        }
+        return
+    }
+
     Scaffold(
         topBar = {
             TopAppBar(
@@ -139,6 +231,35 @@ fun SftpScreen(
                     }
                 },
                 actions = {
+                    IconButton(onClick = { showSortMenu = true }) {
+                        Icon(Icons.Default.Sort, "Sort")
+                    }
+                    DropdownMenu(
+                        expanded = showSortMenu,
+                        onDismissRequest = { showSortMenu = false }
+                    ) {
+                        DropdownMenuItem(
+                            text = { Text("Sort by Name" + if (uiState.sortOption == SortOption.NAME) (if (uiState.sortAscending) " ↑" else " ↓") else "") },
+                            onClick = {
+                                viewModel.setSortOption(SortOption.NAME)
+                                showSortMenu = false
+                            }
+                        )
+                        DropdownMenuItem(
+                            text = { Text("Sort by Size" + if (uiState.sortOption == SortOption.SIZE) (if (uiState.sortAscending) " ↑" else " ↓") else "") },
+                            onClick = {
+                                viewModel.setSortOption(SortOption.SIZE)
+                                showSortMenu = false
+                            }
+                        )
+                        DropdownMenuItem(
+                            text = { Text("Sort by Date" + if (uiState.sortOption == SortOption.MODIFIED_TIME) (if (uiState.sortAscending) " ↑" else " ↓") else "") },
+                            onClick = {
+                                viewModel.setSortOption(SortOption.MODIFIED_TIME)
+                                showSortMenu = false
+                            }
+                        )
+                    }
                     IconButton(onClick = { showNewFolderDialog = true }) {
                         Icon(Icons.Default.CreateNewFolder, "New Folder")
                     }
@@ -150,6 +271,13 @@ fun SftpScreen(
                     containerColor = MaterialTheme.colorScheme.primaryContainer
                 )
             )
+        },
+        floatingActionButton = {
+            if (uiState.isConnected) {
+                FloatingActionButton(onClick = { uploadLauncher.launch("*/*") }) {
+                    Icon(Icons.Default.Upload, "Upload File")
+                }
+            }
         }
     ) { paddingValues ->
         Box(

@@ -1,4 +1,4 @@
-﻿package com.example.simpleshell.data.local.database
+package com.example.simpleshell.data.local.database
 
 import androidx.room.Database
 import androidx.room.RoomDatabase
@@ -7,6 +7,7 @@ import com.example.simpleshell.data.local.database.entity.CommandHistoryEntity
 import com.example.simpleshell.data.local.database.entity.ConnectionEntity
 import com.example.simpleshell.data.local.database.entity.GroupEntity
 import com.example.simpleshell.data.local.database.entity.SettingKvEntity
+import com.example.simpleshell.data.local.database.entity.SnippetEntity
 
 @Database(
     entities = [
@@ -14,9 +15,10 @@ import com.example.simpleshell.data.local.database.entity.SettingKvEntity
         GroupEntity::class,
         AiConfigEntity::class,
         SettingKvEntity::class,
-        CommandHistoryEntity::class
+        CommandHistoryEntity::class,
+        SnippetEntity::class
     ],
-    version = 3,
+    version = 4,
     exportSchema = true
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -25,4 +27,5 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun aiConfigDao(): AiConfigDao
     abstract fun settingsKvDao(): SettingsKvDao
     abstract fun commandHistoryDao(): CommandHistoryDao
+    abstract fun snippetDao(): SnippetDao
 }
