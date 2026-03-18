@@ -45,7 +45,7 @@ class HomeViewModel @Inject constructor(
                 HomeUiState(
                     groups = groups,
                     connections = connections,
-                    connectedTerminalConnectionIds = connectedSessions.keys,
+                    connectedTerminalConnectionIds = connectedSessions.values.map { it.connectionId }.toSet(),
                     resourceStats = stats,
                     isLoading = false,
                     error = null
@@ -66,7 +66,7 @@ class HomeViewModel @Inject constructor(
     fun disconnectTerminal(connectionId: Long) {
         // Disconnect can block on network I/O / socket close; never do it on the main thread.
         viewModelScope.launch(Dispatchers.IO) {
-            terminalSessionManager.disconnect(connectionId)
+            terminalSessionManager.disconnectConnection(connectionId)
         }
     }
 

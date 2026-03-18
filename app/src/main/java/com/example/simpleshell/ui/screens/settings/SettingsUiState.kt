@@ -1,4 +1,4 @@
-﻿package com.example.simpleshell.ui.screens.settings
+package com.example.simpleshell.ui.screens.settings
 
 import com.example.simpleshell.data.importing.SimpleShellPcImportSummary
 import com.example.simpleshell.data.remote.ReleaseInfo
@@ -11,6 +11,9 @@ data class SettingsUiState(
     val dynamicColor: Boolean = true,
     val themeColor: ThemeColor = ThemeColor.PURPLE,
     val language: Language = Language.SYSTEM,
+    val webDavUrl: String = "",
+    val webDavUsername: String = "",
+    val webDavPassword: String = "",
     val updateCheckState: UpdateCheckState = UpdateCheckState.Idle,
     val importState: ImportState = ImportState.Idle,
     val syncState: SyncState = SyncState.Idle

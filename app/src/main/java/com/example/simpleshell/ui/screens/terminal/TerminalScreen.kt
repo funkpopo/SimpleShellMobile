@@ -25,6 +25,10 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -61,6 +65,8 @@ fun TerminalScreen(
     viewModel: TerminalViewModel = hiltViewModel()
 ) {
     val uiState by viewModel.uiState.collectAsState()
+    val currentTab = uiState.currentTab
+    
     // 用于捕获键盘输入的缓冲区
     var inputBuffer by remember { mutableStateOf("") }
     var lastSentLength by remember { mutableIntStateOf(0) }
@@ -85,13 +91,13 @@ fun TerminalScreen(
     val notificationPermissionLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.RequestPermission()
     ) { granted ->
-        if (granted && uiState.isConnected) {
+        if (granted && currentTab?.isConnected == true) {
             startConnectionService()
         }
     }
 
-    LaunchedEffect(uiState.isConnected, uiState.connectionName) {
-        if (uiState.isConnected) {
+    LaunchedEffect(currentTab?.isConnected, uiState.connectionName) {
+        if (currentTab?.isConnected == true) {
             val hasNotificationPermission = if (Build.VERSION.SDK_INT >= 33) {
                 ContextCompat.checkSelfPermission(
                     context,
@@ -124,7 +130,7 @@ fun TerminalScreen(
         label = "cursorAlpha"
     )
 
-    LaunchedEffect(uiState.output) {
+    LaunchedEffect(currentTab?.output) {
         scrollState.animateScrollTo(scrollState.maxValue)
     }
 
@@ -140,45 +146,92 @@ fun TerminalScreen(
 
     Scaffold(
         topBar = {
-            TopAppBar(
-                title = {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        val titleText = if (uiState.sessionId > 0) {
-                            "${uiState.connectionName.ifEmpty { "Terminal" }}  #${uiState.sessionId}"
-                        } else {
-                            uiState.connectionName.ifEmpty { "Terminal" }
-                        }
-                        Text(
-                            titleText,
-                            maxLines = 1
-                        )
-                        if (uiState.isConnected) {
-                            Spacer(modifier = Modifier.width(8.dp))
-                            Box(
-                                modifier = Modifier
-                                    .size(8.dp)
-                                    .background(Color(0xFF4CAF50), CircleShape)
+            Column {
+                TopAppBar(
+                    title = {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            val titleText = if (currentTab?.sshSessionId ?: 0 > 0) {
+                                "${uiState.connectionName.ifEmpty { "Terminal" }}  #${currentTab?.sshSessionId}"
+                            } else {
+                                uiState.connectionName.ifEmpty { "Terminal" }
+                            }
+                            Text(
+                                titleText,
+                                maxLines = 1
                             )
+                            if (currentTab?.isConnected == true) {
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Box(
+                                    modifier = Modifier
+                                        .size(8.dp)
+                                        .background(Color(0xFF4CAF50), CircleShape)
+                                )
+                            }
+                        }
+                    },
+                    navigationIcon = {
+                        IconButton(onClick = onNavigateBack) {
+                            Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back")
+                        }
+                    },
+                    actions = {
+                        IconButton(onClick = { viewModel.createNewTab() }) {
+                            Icon(Icons.Default.Add, "New Tab")
+                        }
+                        IconButton(onClick = { viewModel.reconnect() }) {
+                            Icon(Icons.Default.Refresh, "Reconnect")
+                        }
+                    },
+                    colors = TopAppBarDefaults.topAppBarColors(
+                        containerColor = Color.Black,
+                        titleContentColor = Color.White,
+                        navigationIconContentColor = Color.White,
+                        actionIconContentColor = Color.White
+                    )
+                )
+                if (uiState.tabs.isNotEmpty()) {
+                    LazyRow(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .background(Color(0xFF1E1E1E))
+                    ) {
+                        itemsIndexed(uiState.tabs) { index, tab ->
+                            val isSelected = tab.sessionId == uiState.currentSessionId
+                            Row(
+                                modifier = Modifier
+                                    .background(if (isSelected) Color(0xFF333333) else Color.Transparent)
+                                    .clickable { viewModel.switchTab(tab.sessionId) }
+                                    .padding(horizontal = 16.dp, vertical = 8.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text(
+                                    text = "Tab ${index + 1}",
+                                    color = if (isSelected) Color.White else Color.Gray,
+                                    fontSize = 14.sp
+                                )
+                                Spacer(modifier = Modifier.width(8.dp))
+                                IconButton(
+                                    onClick = { viewModel.closeTab(tab.sessionId) },
+                                    modifier = Modifier.size(16.dp)
+                                ) {
+                                    Icon(
+                                        Icons.Default.Close,
+                                        contentDescription = "Close Tab",
+                                        tint = if (isSelected) Color.White else Color.Gray
+                                    )
+                                }
+                            }
+                            if (index < uiState.tabs.size - 1) {
+                                Spacer(modifier = Modifier
+                                    .width(1.dp)
+                                    .height(24.dp)
+                                    .background(Color.DarkGray)
+                                )
+                            }
                         }
                     }
-                },
-                navigationIcon = {
-                    IconButton(onClick = onNavigateBack) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back")
-                    }
-                },
-                actions = {
-                    IconButton(onClick = { viewModel.reconnect() }) {
-                        Icon(Icons.Default.Refresh, "Reconnect")
-                    }
-                },
-                colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = Color.Black,
-                    titleContentColor = Color.White,
-                    navigationIconContentColor = Color.White,
-                    actionIconContentColor = Color.White
-                )
-            )
+                }
+            }
         }
     ) { paddingValues ->
         Column(
@@ -190,7 +243,15 @@ fun TerminalScreen(
                 .background(Color.Black)
         ) {
             when {
-                uiState.isConnecting -> {
+                currentTab == null -> {
+                    Box(
+                        modifier = Modifier.fillMaxSize(),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text("No active sessions", color = Color.Gray)
+                    }
+                }
+                currentTab.isConnecting -> {
                     Box(
                         modifier = Modifier
                             .weight(1f)
@@ -204,7 +265,7 @@ fun TerminalScreen(
                         }
                     }
                 }
-                uiState.error != null -> {
+                currentTab.error != null -> {
                     Box(
                         modifier = Modifier
                             .weight(1f)
@@ -213,7 +274,7 @@ fun TerminalScreen(
                     ) {
                         Column(horizontalAlignment = Alignment.CenterHorizontally) {
                             Text(
-                                uiState.error ?: "Unknown error",
+                                currentTab.error,
                                 color = Color(0xFFFF5252)
                             )
                             Spacer(modifier = Modifier.height(16.dp))
@@ -264,7 +325,7 @@ fun TerminalScreen(
                                 .verticalScroll(scrollState)
                                 .padding(6.dp)
                         ) {
-                            if (!uiState.isConnected) {
+                            if (!currentTab.isConnected) {
                                 Text(
                                     text = "Disconnected \u2014 tap Reconnect",
                                     color = Color(0xFFFF5252),
@@ -274,12 +335,12 @@ fun TerminalScreen(
                             }
 
                             // 终端输出文本，末尾带闪烁光标
-                            val textWithCursor = remember(uiState.output) {
+                            val textWithCursor = remember(currentTab.output) {
                                 buildAnnotatedString {
-                                    val parsed = if (uiState.output.isEmpty()) {
+                                    val parsed = if (currentTab.output.isEmpty()) {
                                         AnsiParser.parse("Waiting for output...", Color(0xFFAAAAAA))
                                     } else {
-                                        AnsiParser.parse(uiState.output, Color(0xFFE5E5E5))
+                                        AnsiParser.parse(currentTab.output, Color(0xFFE5E5E5))
                                     }
                                     append(parsed)
                                     appendInlineContent("cursor", "[█]")

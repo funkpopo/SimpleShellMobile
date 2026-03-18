@@ -63,8 +63,8 @@ class ResourceMonitor @Inject constructor(
                     stopPolling()
                     _stats.value = emptyMap()
                 }
-                val currentIds = sessions.keys
-                _stats.value = _stats.value.filterKeys { it in currentIds }
+                val currentConnectionIds = sessions.values.map { it.connectionId }.toSet()
+                _stats.value = _stats.value.filterKeys { it in currentConnectionIds }
             }
         }
     }
@@ -85,16 +85,19 @@ class ResourceMonitor @Inject constructor(
     }
 
     private suspend fun pollAll() {
-        val connectedIds = terminalSessionManager.connectedSessions.value.keys
+        // Group by connectionId to only poll once per connection
+        val connectedSessions = terminalSessionManager.connectedSessions.value.values
+            .distinctBy { it.connectionId }
+            
         val results = mutableMapOf<Long, ResourceStats>()
 
         coroutineScope {
-            connectedIds.map { connectionId ->
+            connectedSessions.map { summary ->
                 async {
-                    val session = terminalSessionManager.getSession(connectionId)
-                    val output = session.executeExecCommand(MONITOR_COMMAND, timeoutSeconds = 5)
+                    val session = terminalSessionManager.getSession(summary.sessionId)
+                    val output = session?.executeExecCommand(MONITOR_COMMAND, timeoutSeconds = 5)
                     val parsed = output?.let { parseMonitorOutput(it) }
-                    if (parsed != null) connectionId to parsed else null
+                    if (parsed != null) summary.connectionId to parsed else null
                 }
             }.mapNotNull { it.await() }
              .forEach { (id, stat) -> results[id] = stat }

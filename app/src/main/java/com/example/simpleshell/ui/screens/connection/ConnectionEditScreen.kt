@@ -8,10 +8,13 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
@@ -23,6 +26,7 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.compose.ui.platform.LocalFocusManager
 import com.example.simpleshell.R
 import com.example.simpleshell.domain.model.Connection
+import com.example.simpleshell.domain.model.PortForwardingRule
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -245,6 +249,39 @@ fun ConnectionEditScreen(
 
             Spacer(modifier = Modifier.height(16.dp))
 
+            Text(
+                text = "Port Forwarding Rules",
+                style = MaterialTheme.typography.titleMedium
+            )
+
+            uiState.portForwardingRules.forEachIndexed { index, rule ->
+                PortForwardingRuleItem(
+                    rule = rule,
+                    onUpdate = { updatedRule -> viewModel.updatePortForwardingRule(index, updatedRule) },
+                    onDelete = { viewModel.removePortForwardingRule(index) }
+                )
+            }
+
+            OutlinedButton(
+                onClick = {
+                    viewModel.addPortForwardingRule(
+                        PortForwardingRule(
+                            type = PortForwardingRule.Type.LOCAL,
+                            localPort = 8080,
+                            remoteHost = "localhost",
+                            remotePort = 80
+                        )
+                    )
+                },
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Icon(Icons.Default.Add, contentDescription = "Add Rule")
+                Spacer(modifier = Modifier.width(8.dp))
+                Text("Add Port Forwarding Rule")
+            }
+
+            Spacer(modifier = Modifier.height(16.dp))
+
             Button(
                 onClick = viewModel::saveConnection,
                 modifier = Modifier.fillMaxWidth(),
@@ -266,6 +303,101 @@ fun ConnectionEditScreen(
                     color = MaterialTheme.colorScheme.error,
                     style = MaterialTheme.typography.bodySmall
                 )
+            }
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun PortForwardingRuleItem(
+    rule: PortForwardingRule,
+    onUpdate: (PortForwardingRule) -> Unit,
+    onDelete: () -> Unit
+) {
+    var expanded by remember { mutableStateOf(false) }
+
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
+    ) {
+        Column(
+            modifier = Modifier.padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                ExposedDropdownMenuBox(
+                    expanded = expanded,
+                    onExpandedChange = { expanded = !expanded },
+                    modifier = Modifier.weight(1f)
+                ) {
+                    OutlinedTextField(
+                        value = rule.type.name,
+                        onValueChange = {},
+                        readOnly = true,
+                        label = { Text("Type") },
+                        modifier = Modifier.menuAnchor(MenuAnchorType.PrimaryNotEditable),
+                        trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) }
+                    )
+                    ExposedDropdownMenu(
+                        expanded = expanded,
+                        onDismissRequest = { expanded = false }
+                    ) {
+                        PortForwardingRule.Type.values().forEach { type ->
+                            DropdownMenuItem(
+                                text = { Text(type.name) },
+                                onClick = {
+                                    onUpdate(rule.copy(type = type))
+                                    expanded = false
+                                }
+                            )
+                        }
+                    }
+                }
+
+                IconButton(onClick = onDelete) {
+                    Icon(Icons.Default.Delete, contentDescription = "Delete Rule")
+                }
+            }
+
+            OutlinedTextField(
+                value = rule.localPort.toString(),
+                onValueChange = { onUpdate(rule.copy(localPort = it.toIntOrNull() ?: rule.localPort)) },
+                label = { Text("Local Port") },
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                modifier = Modifier.fillMaxWidth(),
+                singleLine = true
+            )
+
+            if (rule.type != PortForwardingRule.Type.DYNAMIC) {
+                OutlinedTextField(
+                    value = rule.remoteHost ?: "",
+                    onValueChange = { onUpdate(rule.copy(remoteHost = it)) },
+                    label = { Text("Remote Host") },
+                    modifier = Modifier.fillMaxWidth(),
+                    singleLine = true
+                )
+
+                OutlinedTextField(
+                    value = rule.remotePort?.toString() ?: "",
+                    onValueChange = { onUpdate(rule.copy(remotePort = it.toIntOrNull())) },
+                    label = { Text("Remote Port") },
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                    modifier = Modifier.fillMaxWidth(),
+                    singleLine = true
+                )
+            }
+
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Checkbox(
+                    checked = rule.isEnabled,
+                    onCheckedChange = { onUpdate(rule.copy(isEnabled = it)) }
+                )
+                Text("Enabled")
             }
         }
     }

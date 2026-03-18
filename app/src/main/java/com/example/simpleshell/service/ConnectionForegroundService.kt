@@ -80,7 +80,7 @@ class ConnectionForegroundService : Service() {
                 if (connectionId > 0) {
                     serviceScope.launch {
                         withContext(Dispatchers.IO) {
-                            terminalSessionManager.disconnect(connectionId)
+                            terminalSessionManager.disconnectConnection(connectionId)
                         }
                     }
                 }
@@ -146,14 +146,15 @@ class ConnectionForegroundService : Service() {
         }
 
         // Child notifications for each terminal connection (so each has its own Disconnect action).
-        val connectedTerminalIds = snapshot.terminalSessions.map { it.connectionId }.toSet()
+        val distinctTerminals = snapshot.terminalSessions.distinctBy { it.connectionId }
+        val connectedTerminalIds = distinctTerminals.map { it.connectionId }.toSet()
         val removedIds = shownTerminalNotificationIds - connectedTerminalIds
         val addedOrStillIds = connectedTerminalIds
 
         removedIds.forEach { id ->
             mgr.cancel(terminalNotificationId(id))
         }
-        snapshot.terminalSessions.forEach { terminal ->
+        distinctTerminals.forEach { terminal ->
             if (terminal.connectionId in addedOrStillIds) {
                 mgr.notify(
                     terminalNotificationId(terminal.connectionId),
@@ -194,7 +195,8 @@ class ConnectionForegroundService : Service() {
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
         )
 
-        val terminalCount = snapshot.terminalSessions.size
+        val distinctTerminals = snapshot.terminalSessions.distinctBy { it.connectionId }
+        val terminalCount = distinctTerminals.size
         val totalCount = terminalCount + if (snapshot.sftpConnected) 1 else 0
         val contentText = when {
             totalCount <= 0 -> "No active connections"
@@ -204,14 +206,16 @@ class ConnectionForegroundService : Service() {
         }
 
         val inbox = NotificationCompat.InboxStyle()
-        snapshot.terminalSessions.take(5).forEach { terminal ->
-            inbox.addLine("Terminal: ${terminal.connectionName}")
+        snapshot.terminalSessions.distinctBy { it.connectionId }.take(5).forEach { terminal ->
+            val count = snapshot.terminalSessions.count { it.connectionId == terminal.connectionId }
+            val suffix = if (count > 1) " ($count sessions)" else ""
+            inbox.addLine("Terminal: ${terminal.connectionName}$suffix")
         }
         if (snapshot.sftpConnected) {
             inbox.addLine("SFTP: connected")
         }
-        if (snapshot.terminalSessions.size > 5) {
-            inbox.addLine("...and ${snapshot.terminalSessions.size - 5} more")
+        if (distinctTerminals.size > 5) {
+            inbox.addLine("...and ${distinctTerminals.size - 5} more")
         }
 
         val builder = NotificationCompat.Builder(this, CHANNEL_ID)

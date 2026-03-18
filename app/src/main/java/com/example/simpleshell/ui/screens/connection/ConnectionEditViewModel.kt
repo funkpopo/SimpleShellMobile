@@ -5,9 +5,11 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.simpleshell.data.importing.SimpleShellPcCryptoCompat
 import com.example.simpleshell.data.local.database.entity.ConnectionEntity
+import com.example.simpleshell.data.local.database.entity.PortForwardingEntity
 import com.example.simpleshell.data.repository.ConnectionRepository
 import com.example.simpleshell.data.repository.GroupRepository
 import com.example.simpleshell.domain.model.Connection
+import com.example.simpleshell.domain.model.PortForwardingRule
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -58,6 +60,19 @@ class ConnectionEditViewModel @Inject constructor(
                         SimpleShellPcCryptoCompat.decryptNullableMaybe(connection.privateKeyPassphrase).orEmpty()
                     val decryptedPrivateKey =
                         SimpleShellPcCryptoCompat.decryptNullableMaybe(connection.privateKey)
+                    
+                    val rules = connectionRepository.getPortForwardingRulesOnce(connectionId).map {
+                        PortForwardingRule(
+                            id = it.id,
+                            connectionId = it.connectionId,
+                            type = PortForwardingRule.Type.valueOf(it.type),
+                            localPort = it.localPort,
+                            remoteHost = it.remoteHost,
+                            remotePort = it.remotePort,
+                            isEnabled = it.isEnabled
+                        )
+                    }
+
                     _uiState.value = _uiState.value.copy(
                         name = connection.name,
                         groupId = connection.groupId,
@@ -69,6 +84,7 @@ class ConnectionEditViewModel @Inject constructor(
                         privateKeyPassphrase = decryptedPassphrase,
                         authType = if (connection.authType == "key")
                             Connection.AuthType.KEY else Connection.AuthType.PASSWORD,
+                        portForwardingRules = rules,
                         isLoading = false,
                         isEditMode = true
                     )
@@ -118,6 +134,28 @@ class ConnectionEditViewModel @Inject constructor(
         _uiState.value = _uiState.value.copy(authType = authType)
     }
 
+    fun addPortForwardingRule(rule: PortForwardingRule) {
+        _uiState.value = _uiState.value.copy(
+            portForwardingRules = _uiState.value.portForwardingRules + rule
+        )
+    }
+
+    fun updatePortForwardingRule(index: Int, rule: PortForwardingRule) {
+        val rules = _uiState.value.portForwardingRules.toMutableList()
+        if (index in rules.indices) {
+            rules[index] = rule
+            _uiState.value = _uiState.value.copy(portForwardingRules = rules)
+        }
+    }
+
+    fun removePortForwardingRule(index: Int) {
+        val rules = _uiState.value.portForwardingRules.toMutableList()
+        if (index in rules.indices) {
+            rules.removeAt(index)
+            _uiState.value = _uiState.value.copy(portForwardingRules = rules)
+        }
+    }
+
     fun saveConnection() {
         val state = _uiState.value
         if (state.name.isBlank() || state.host.isBlank() || state.username.isBlank()) {
@@ -148,10 +186,22 @@ class ConnectionEditViewModel @Inject constructor(
                     authType = if (state.authType == Connection.AuthType.KEY) "key" else "password"
                 )
 
+                val rulesEntities = state.portForwardingRules.map {
+                    PortForwardingEntity(
+                        id = it.id,
+                        connectionId = entity.id,
+                        type = it.type.name,
+                        localPort = it.localPort,
+                        remoteHost = it.remoteHost,
+                        remotePort = it.remotePort,
+                        isEnabled = it.isEnabled
+                    )
+                }
+
                 if (connectionId > 0) {
-                    connectionRepository.updateConnection(entity)
+                    connectionRepository.updateConnection(entity, rulesEntities)
                 } else {
-                    connectionRepository.saveConnection(entity)
+                    connectionRepository.saveConnection(entity, rulesEntities)
                 }
 
                 _uiState.value = _uiState.value.copy(

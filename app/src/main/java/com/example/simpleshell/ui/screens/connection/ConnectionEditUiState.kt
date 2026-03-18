@@ -2,6 +2,7 @@ package com.example.simpleshell.ui.screens.connection
 
 import com.example.simpleshell.data.local.database.entity.GroupEntity
 import com.example.simpleshell.domain.model.Connection
+import com.example.simpleshell.domain.model.PortForwardingRule
 
 data class ConnectionEditUiState(
     val name: String = "",
@@ -14,6 +15,7 @@ data class ConnectionEditUiState(
     val privateKey: String = "",
     val privateKeyPassphrase: String = "",
     val authType: Connection.AuthType = Connection.AuthType.PASSWORD,
+    val portForwardingRules: List<PortForwardingRule> = emptyList(),
     val isLoading: Boolean = false,
     val isSaved: Boolean = false,
     val error: String? = null,

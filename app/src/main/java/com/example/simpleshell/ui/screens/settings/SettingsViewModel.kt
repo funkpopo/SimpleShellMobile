@@ -1,4 +1,4 @@
-﻿package com.example.simpleshell.ui.screens.settings
+package com.example.simpleshell.ui.screens.settings
 
 import android.content.ContentResolver
 import android.net.Uri
@@ -10,6 +10,7 @@ import com.example.simpleshell.data.importing.SimpleShellPcConfigImporter
 import com.example.simpleshell.data.local.preferences.UserPreferencesRepository
 import com.example.simpleshell.data.remote.UpdateCheckResult
 import com.example.simpleshell.data.remote.UpdateChecker
+import com.example.simpleshell.data.remote.WebDavSyncManager
 import com.example.simpleshell.domain.model.Language
 import com.example.simpleshell.domain.model.ThemeColor
 import com.example.simpleshell.domain.model.ThemeMode
@@ -28,7 +29,8 @@ class SettingsViewModel @Inject constructor(
     private val userPreferencesRepository: UserPreferencesRepository,
     private val updateChecker: UpdateChecker,
     private val pcConfigImporter: SimpleShellPcConfigImporter,
-    private val pcConfigExporter: SimpleShellPcConfigExporter
+    private val pcConfigExporter: SimpleShellPcConfigExporter,
+    private val webDavSyncManager: WebDavSyncManager
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(SettingsUiState())
@@ -45,7 +47,10 @@ class SettingsViewModel @Inject constructor(
                         themeMode = prefs.themeMode,
                         dynamicColor = prefs.dynamicColor,
                         themeColor = prefs.themeColor,
-                        language = prefs.language
+                        language = prefs.language,
+                        webDavUrl = prefs.webDavUrl,
+                        webDavUsername = prefs.webDavUsername,
+                        webDavPassword = prefs.webDavPassword
                     )
                 }
         }
@@ -72,6 +77,54 @@ class SettingsViewModel @Inject constructor(
     fun setLanguage(language: Language) {
         viewModelScope.launch {
             userPreferencesRepository.setLanguage(language)
+        }
+    }
+
+    fun setWebDavUrl(url: String) {
+        viewModelScope.launch {
+            userPreferencesRepository.setWebDavUrl(url)
+        }
+    }
+
+    fun setWebDavUsername(username: String) {
+        viewModelScope.launch {
+            userPreferencesRepository.setWebDavUsername(username)
+        }
+    }
+
+    fun setWebDavPassword(password: String) {
+        viewModelScope.launch {
+            userPreferencesRepository.setWebDavPassword(password)
+        }
+    }
+
+    fun backupToWebDav() {
+        if (_uiState.value.syncState is SyncState.Working) return
+        viewModelScope.launch {
+            _uiState.value = _uiState.value.copy(syncState = SyncState.Working)
+            val result = webDavSyncManager.backup()
+            _uiState.value = _uiState.value.copy(
+                syncState = if (result.isSuccess) {
+                    SyncState.Success("Backup to WebDAV successful")
+                } else {
+                    SyncState.Error(result.exceptionOrNull()?.message ?: "Backup failed")
+                }
+            )
+        }
+    }
+
+    fun restoreFromWebDav() {
+        if (_uiState.value.syncState is SyncState.Working) return
+        viewModelScope.launch {
+            _uiState.value = _uiState.value.copy(syncState = SyncState.Working)
+            val result = webDavSyncManager.restore()
+            _uiState.value = _uiState.value.copy(
+                syncState = if (result.isSuccess) {
+                    SyncState.Success("Restore from WebDAV successful")
+                } else {
+                    SyncState.Error(result.exceptionOrNull()?.message ?: "Restore failed")
+                }
+            )
         }
     }
 

@@ -17,6 +17,11 @@ import kotlinx.coroutines.withContext
 import net.schmizz.sshj.SSHClient
 import net.schmizz.sshj.common.IOUtils
 import net.schmizz.sshj.connection.channel.direct.Session
+import net.schmizz.sshj.connection.channel.direct.Parameters
+import net.schmizz.sshj.connection.channel.forwarded.RemotePortForwarder.Forward
+import net.schmizz.sshj.connection.channel.forwarded.SocketForwardingConnectListener
+import java.net.InetSocketAddress
+import java.net.ServerSocket
 import net.schmizz.sshj.transport.verification.PromiscuousVerifier
 import java.io.BufferedReader
 import java.io.File
@@ -29,6 +34,7 @@ import javax.inject.Inject
 import javax.inject.Singleton
 
 data class TerminalConnectionSummary(
+    val sessionId: String,
     val connectionId: Long,
     val connectionName: String,
     val connectedAtMs: Long
@@ -39,31 +45,48 @@ class TerminalSessionManager @Inject constructor(
     @ApplicationContext private val context: Context
 ) {
     private val lock = Any()
-    private val sessions = mutableMapOf<Long, TerminalSshSession>()
+    private val sessions = mutableMapOf<String, TerminalSshSession>()
 
     private val _connectedSessions =
-        MutableStateFlow<Map<Long, TerminalConnectionSummary>>(emptyMap())
-    val connectedSessions: StateFlow<Map<Long, TerminalConnectionSummary>> =
+        MutableStateFlow<Map<String, TerminalConnectionSummary>>(emptyMap())
+    val connectedSessions: StateFlow<Map<String, TerminalConnectionSummary>> =
         _connectedSessions.asStateFlow()
 
-    fun getSession(connectionId: Long): TerminalSshSession {
+    fun getSessionsForConnection(connectionId: Long): List<TerminalSshSession> {
         synchronized(lock) {
-            return sessions.getOrPut(connectionId) {
-                TerminalSshSession(
-                    context = context,
-                    connectionId = connectionId,
-                    onConnected = { summary ->
-                        _connectedSessions.update { current ->
-                            current + (summary.connectionId to summary)
-                        }
-                    },
-                    onDisconnected = { id ->
-                        _connectedSessions.update { current ->
-                            current - id
-                        }
+            return sessions.values.filter { it.connectionId == connectionId }
+        }
+    }
+
+    fun getSession(sessionId: String): TerminalSshSession? {
+        synchronized(lock) {
+            return sessions[sessionId]
+        }
+    }
+
+    fun createSession(connectionId: Long): TerminalSshSession {
+        val sessionId = java.util.UUID.randomUUID().toString()
+        synchronized(lock) {
+            val session = TerminalSshSession(
+                context = context,
+                sessionId = sessionId,
+                connectionId = connectionId,
+                onConnected = { summary ->
+                    _connectedSessions.update { current ->
+                        current + (summary.sessionId to summary)
                     }
-                )
-            }
+                },
+                onDisconnected = { id ->
+                    _connectedSessions.update { current ->
+                        current - id
+                    }
+                    synchronized(lock) {
+                        sessions.remove(id)
+                    }
+                }
+            )
+            sessions[sessionId] = session
+            return session
         }
     }
 
@@ -72,15 +95,19 @@ class TerminalSessionManager @Inject constructor(
      *
      * @return true if a new connection was established, false if the session was already connected.
      */
-    suspend fun connectIfNeeded(connection: Connection): Boolean {
-        val session = getSession(connection.id)
+    suspend fun connectIfNeeded(connection: Connection, sessionId: String): Boolean {
+        val session = getSession(sessionId) ?: return false
         return session.connectIfNeeded(connection)
     }
 
-    fun disconnect(connectionId: Long) {
+    fun disconnect(sessionId: String) {
         synchronized(lock) {
-            sessions[connectionId]
+            sessions[sessionId]
         }?.disconnect()
+    }
+
+    fun disconnectConnection(connectionId: Long) {
+        getSessionsForConnection(connectionId).forEach { it.disconnect() }
     }
 
     fun disconnectAll() {
@@ -97,9 +124,10 @@ class TerminalSessionManager @Inject constructor(
  */
 class TerminalSshSession internal constructor(
     private val context: Context,
-    private val connectionId: Long,
+    val sessionId: String,
+    val connectionId: Long,
     private val onConnected: (TerminalConnectionSummary) -> Unit,
-    private val onDisconnected: (Long) -> Unit
+    private val onDisconnected: (String) -> Unit
 ) {
     private val stateLock = Any()
 
@@ -119,14 +147,16 @@ class TerminalSshSession internal constructor(
     private val _isConnected = MutableStateFlow(false)
     val isConnected: StateFlow<Boolean> = _isConnected.asStateFlow()
 
-    private val _sessionId = MutableStateFlow(0L)
-    val sessionId: StateFlow<Long> = _sessionId.asStateFlow()
+    private val _sshSessionId = MutableStateFlow(0L)
+    val sshSessionId: StateFlow<Long> = _sshSessionId.asStateFlow()
 
     private val _connectedAtMs = MutableStateFlow<Long?>(null)
     val connectedAtMs: StateFlow<Long?> = _connectedAtMs.asStateFlow()
 
     private val outputBuffer = StringBuilder()
     private val disconnectGeneration = AtomicLong(0L)
+
+    private val localServerSockets = mutableListOf<ServerSocket>()
 
     companion object {
         /** Cap the output buffer at ~512 KB to prevent OOM on long-running sessions. */
@@ -200,10 +230,11 @@ class TerminalSshSession internal constructor(
                     tempKeyFile = newTempKeyFile
 
                     _isConnected.value = true
-                    _sessionId.value = _sessionId.value + 1
+                    _sshSessionId.value = _sshSessionId.value + 1
                     _connectedAtMs.value = now
                     onConnected(
                         TerminalConnectionSummary(
+                            sessionId = sessionId,
                             connectionId = connectionId,
                             connectionName = connection.name,
                             connectedAtMs = now
@@ -215,6 +246,7 @@ class TerminalSshSession internal constructor(
             if (!committed) return@withContext false
 
             startReadingOutput()
+            startPortForwarding(connection)
 
             true
         } finally {
@@ -234,6 +266,51 @@ class TerminalSshSession internal constructor(
                     }
                 }
                 runCatching { newTempKeyFile?.delete() }
+            }
+        }
+    }
+
+    private fun startPortForwarding(connection: Connection) {
+        val currentClient = synchronized(stateLock) { client } ?: return
+        connection.portForwardingRules.filter { it.isEnabled }.forEach { rule ->
+            when (rule.type) {
+                com.example.simpleshell.domain.model.PortForwardingRule.Type.LOCAL -> {
+                    scope.launch {
+                        try {
+                            val params = Parameters(
+                                "127.0.0.1", rule.localPort,
+                                rule.remoteHost ?: "127.0.0.1", rule.remotePort ?: 80
+                            )
+                            val ss = ServerSocket()
+                            ss.reuseAddress = true
+                            ss.bind(InetSocketAddress(params.localHost, params.localPort))
+                            synchronized(stateLock) {
+                                localServerSockets.add(ss)
+                            }
+                            currentClient.newLocalPortForwarder(params, ss).listen()
+                        } catch (e: Exception) {
+                            Log.e("TerminalSshSession", "Failed to start local port forwarding", e)
+                        }
+                    }
+                }
+                com.example.simpleshell.domain.model.PortForwardingRule.Type.REMOTE -> {
+                    scope.launch {
+                        try {
+                            val bindAddress = if (rule.remoteHost.isNullOrBlank()) "0.0.0.0" else rule.remoteHost
+                            val forward = Forward(bindAddress, rule.remotePort ?: 8080)
+                            currentClient.remotePortForwarder.bind(
+                                forward,
+                                SocketForwardingConnectListener(InetSocketAddress("127.0.0.1", rule.localPort))
+                            )
+                        } catch (e: Exception) {
+                            Log.e("TerminalSshSession", "Failed to start remote port forwarding", e)
+                        }
+                    }
+                }
+                com.example.simpleshell.domain.model.PortForwardingRule.Type.DYNAMIC -> {
+                    Log.w("TerminalSshSession", "Dynamic port forwarding (SOCKS) is not natively supported by SSHJ yet.")
+                    // TODO: Implement SOCKS proxy using local port forwarding or a custom SOCKS server
+                }
             }
         }
     }
@@ -373,7 +450,12 @@ class TerminalSshSession internal constructor(
         // Update observers early so the UI/notification can reflect the disconnected state even
         // if socket/channel shutdown takes a moment.
         if (emitDisconnected && wasConnected) {
-            onDisconnected(connectionId)
+            onDisconnected(sessionId)
+        }
+
+        synchronized(stateLock) {
+            localServerSockets.forEach { runCatching { it.close() } }
+            localServerSockets.clear()
         }
 
         // Force-close socket first to unblock any blocking reads/writes inside sshj/channel close.

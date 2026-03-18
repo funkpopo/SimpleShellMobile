@@ -14,5 +14,8 @@ data class UserPreferences(
      *
      * 1.0 = default size. Values outside a reasonable range should be clamped by callers.
      */
-    val terminalFontScale: Float = 1.0f
+    val terminalFontScale: Float = 1.0f,
+    val webDavUrl: String = "",
+    val webDavUsername: String = "",
+    val webDavPassword: String = ""
 )

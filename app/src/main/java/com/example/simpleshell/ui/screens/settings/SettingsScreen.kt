@@ -36,6 +36,8 @@ import androidx.compose.material.icons.filled.Palette
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.outlined.Code
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -81,6 +83,7 @@ fun SettingsScreen(
     val uiState by viewModel.uiState.collectAsState()
     var showThemeDialog by remember { mutableStateOf(false) }
     var showLanguageDialog by remember { mutableStateOf(false) }
+    var showWebDavDialog by remember { mutableStateOf(false) }
     var aboutExpanded by remember { mutableStateOf(false) }
     val uriHandler = LocalUriHandler.current
     val context = LocalContext.current
@@ -134,6 +137,23 @@ fun SettingsScreen(
                 viewModel.setLanguage(language)
                 showLanguageDialog = false
             }
+        )
+    }
+
+    if (showWebDavDialog) {
+        WebDavDialog(
+            url = uiState.webDavUrl,
+            username = uiState.webDavUsername,
+            password = uiState.webDavPassword,
+            onDismiss = { showWebDavDialog = false },
+            onSave = { url, user, pass ->
+                viewModel.setWebDavUrl(url)
+                viewModel.setWebDavUsername(user)
+                viewModel.setWebDavPassword(pass)
+                showWebDavDialog = false
+            },
+            onBackup = { viewModel.backupToWebDav() },
+            onRestore = { viewModel.restoreFromWebDav() }
         )
     }
 
@@ -341,6 +361,17 @@ fun SettingsScreen(
                     style = MaterialTheme.typography.titleSmall,
                     modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
                     fontWeight = FontWeight.SemiBold
+                )
+            }
+
+            item {
+                ListItem(
+                    headlineContent = { Text("WebDAV Sync") },
+                    supportingContent = { Text("Configure WebDAV for backup and restore") },
+                    leadingContent = { Icon(Icons.Default.Folder, contentDescription = null) },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable { showWebDavDialog = true }
                 )
             }
 
@@ -665,6 +696,73 @@ private fun UpdateErrorDialog(
         confirmButton = {
             TextButton(onClick = onDismiss) {
                 Text(stringResource(R.string.ok))
+            }
+        }
+    )
+}
+
+@Composable
+private fun WebDavDialog(
+    url: String,
+    username: String,
+    password: String,
+    onDismiss: () -> Unit,
+    onSave: (String, String, String) -> Unit,
+    onBackup: () -> Unit,
+    onRestore: () -> Unit
+) {
+    var editUrl by remember { mutableStateOf(url) }
+    var editUsername by remember { mutableStateOf(username) }
+    var editPassword by remember { mutableStateOf(password) }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("WebDAV Sync") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                OutlinedTextField(
+                    value = editUrl,
+                    onValueChange = { editUrl = it },
+                    label = { Text("Server URL") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
+                )
+                OutlinedTextField(
+                    value = editUsername,
+                    onValueChange = { editUsername = it },
+                    label = { Text("Username") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
+                )
+                OutlinedTextField(
+                    value = editPassword,
+                    onValueChange = { editPassword = it },
+                    label = { Text("Password") },
+                    singleLine = true,
+                    visualTransformation = PasswordVisualTransformation(),
+                    modifier = Modifier.fillMaxWidth()
+                )
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceEvenly
+                ) {
+                    TextButton(onClick = onBackup) {
+                        Text("Backup")
+                    }
+                    TextButton(onClick = onRestore) {
+                        Text("Restore")
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = { onSave(editUrl, editUsername, editPassword) }) {
+                Text(stringResource(R.string.ok))
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text(stringResource(R.string.close))
             }
         }
     )

@@ -1,4 +1,4 @@
-﻿package com.example.simpleshell.data.local.preferences
+package com.example.simpleshell.data.local.preferences
 
 import android.content.Context
 import androidx.datastore.preferences.core.Preferences
@@ -32,6 +32,9 @@ class UserPreferencesRepository @Inject constructor(
         val THEME_COLOR: Preferences.Key<String> = stringPreferencesKey("theme_color")
         val LANGUAGE: Preferences.Key<String> = stringPreferencesKey("language")
         val TERMINAL_FONT_SCALE: Preferences.Key<Float> = floatPreferencesKey("terminal_font_scale")
+        val WEBDAV_URL: Preferences.Key<String> = stringPreferencesKey("webdav_url")
+        val WEBDAV_USERNAME: Preferences.Key<String> = stringPreferencesKey("webdav_username")
+        val WEBDAV_PASSWORD: Preferences.Key<String> = stringPreferencesKey("webdav_password")
     }
 
     val preferences: Flow<UserPreferences> = context.userPreferencesDataStore.data
@@ -41,7 +44,10 @@ class UserPreferencesRepository @Inject constructor(
                 dynamicColor = prefs[Keys.DYNAMIC_COLOR] ?: true,
                 themeColor = prefs[Keys.THEME_COLOR]?.toThemeColor() ?: ThemeColor.PURPLE,
                 language = prefs[Keys.LANGUAGE]?.toLanguage() ?: Language.SYSTEM,
-                terminalFontScale = prefs[Keys.TERMINAL_FONT_SCALE] ?: 1.0f
+                terminalFontScale = prefs[Keys.TERMINAL_FONT_SCALE] ?: 1.0f,
+                webDavUrl = prefs[Keys.WEBDAV_URL] ?: "",
+                webDavUsername = prefs[Keys.WEBDAV_USERNAME] ?: "",
+                webDavPassword = prefs[Keys.WEBDAV_PASSWORD] ?: ""
             )
         }
 
@@ -72,6 +78,24 @@ class UserPreferencesRepository @Inject constructor(
     suspend fun setTerminalFontScale(scale: Float) {
         context.userPreferencesDataStore.edit { prefs ->
             prefs[Keys.TERMINAL_FONT_SCALE] = scale
+        }
+    }
+
+    suspend fun setWebDavUrl(url: String) {
+        context.userPreferencesDataStore.edit { prefs ->
+            prefs[Keys.WEBDAV_URL] = url
+        }
+    }
+
+    suspend fun setWebDavUsername(username: String) {
+        context.userPreferencesDataStore.edit { prefs ->
+            prefs[Keys.WEBDAV_USERNAME] = username
+        }
+    }
+
+    suspend fun setWebDavPassword(password: String) {
+        context.userPreferencesDataStore.edit { prefs ->
+            prefs[Keys.WEBDAV_PASSWORD] = password
         }
     }
 

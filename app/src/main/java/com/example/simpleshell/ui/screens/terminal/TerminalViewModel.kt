@@ -15,6 +15,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.catch
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import javax.inject.Inject
@@ -28,17 +29,36 @@ class TerminalViewModel @Inject constructor(
 ) : ViewModel() {
 
     private val connectionId: Long = savedStateHandle.get<Long>("connectionId") ?: -1
-    private val session = terminalSessionManager.getSession(connectionId)
 
     private val _uiState = MutableStateFlow(TerminalUiState())
     val uiState: StateFlow<TerminalUiState> = _uiState.asStateFlow()
 
     private var saveFontScaleJob: Job? = null
+    private val sessionJobs = mutableMapOf<String, Job>()
 
     init {
         observePreferences()
-        observeTerminalOutput()
-        connect()
+        loadConnectionAndInitialize()
+    }
+
+    private fun loadConnectionAndInitialize() {
+        viewModelScope.launch {
+            val entity = connectionRepository.getConnectionById(connectionId)
+            if (entity != null) {
+                _uiState.update { it.copy(connectionName = entity.name) }
+            }
+            
+            // Get existing sessions or create one
+            val existingSessions = terminalSessionManager.getSessionsForConnection(connectionId)
+            if (existingSessions.isEmpty()) {
+                createNewTab()
+            } else {
+                existingSessions.forEach { session ->
+                    addTabForSession(session.sessionId)
+                }
+                _uiState.update { it.copy(currentSessionId = existingSessions.first().sessionId) }
+            }
+        }
     }
 
     private fun observePreferences() {
@@ -49,51 +69,102 @@ class TerminalViewModel @Inject constructor(
                 }
                 .collect { prefs ->
                     val clamped = clampFontScale(prefs.terminalFontScale)
-                    _uiState.value = _uiState.value.copy(fontScale = clamped)
+                    _uiState.update { it.copy(fontScale = clamped) }
                 }
         }
     }
 
-    private fun observeTerminalOutput() {
-        viewModelScope.launch {
-            session.outputFlow.collect { output ->
-                _uiState.value = _uiState.value.copy(output = output)
-            }
+    fun createNewTab() {
+        val session = terminalSessionManager.createSession(connectionId)
+        addTabForSession(session.sessionId)
+        _uiState.update { it.copy(currentSessionId = session.sessionId) }
+        connectSession(session.sessionId)
+    }
+
+    private fun addTabForSession(sessionId: String) {
+        val newTab = TerminalTabState(sessionId = sessionId)
+        _uiState.update { state ->
+            if (state.tabs.any { it.sessionId == sessionId }) state
+            else state.copy(tabs = state.tabs + newTab)
         }
-        viewModelScope.launch {
-            session.isConnected.collect { isConnected ->
-                _uiState.value = _uiState.value.copy(
-                    isConnected = isConnected,
-                    isConnecting = if (isConnected) false else _uiState.value.isConnecting
-                )
-            }
-        }
-        viewModelScope.launch {
-            session.sessionId.collect { sessionId ->
-                _uiState.value = _uiState.value.copy(sessionId = sessionId)
-            }
-        }
-        viewModelScope.launch {
-            session.connectedAtMs.collect { connectedAtMs ->
-                _uiState.value = _uiState.value.copy(connectedAtMs = connectedAtMs)
-            }
+        observeTerminalSession(sessionId)
+    }
+
+    fun switchTab(sessionId: String) {
+        if (_uiState.value.tabs.any { it.sessionId == sessionId }) {
+            _uiState.update { it.copy(currentSessionId = sessionId) }
         }
     }
 
-    private fun connect() {
+    fun closeTab(sessionId: String) {
+        viewModelScope.launch(Dispatchers.IO) {
+            terminalSessionManager.disconnect(sessionId)
+        }
+        sessionJobs[sessionId]?.cancel()
+        sessionJobs.remove(sessionId)
+
+        _uiState.update { state ->
+            val newTabs = state.tabs.filter { it.sessionId != sessionId }
+            val newCurrent = if (state.currentSessionId == sessionId) {
+                newTabs.lastOrNull()?.sessionId
+            } else {
+                state.currentSessionId
+            }
+            state.copy(tabs = newTabs, currentSessionId = newCurrent)
+        }
+    }
+
+    private fun observeTerminalSession(sessionId: String) {
+        val session = terminalSessionManager.getSession(sessionId) ?: return
+        
+        val job = viewModelScope.launch {
+            launch {
+                session.outputFlow.collect { output ->
+                    updateTabState(sessionId) { it.copy(output = output) }
+                }
+            }
+            launch {
+                session.isConnected.collect { isConnected ->
+                    updateTabState(sessionId) { 
+                        it.copy(
+                            isConnected = isConnected,
+                            isConnecting = if (isConnected) false else it.isConnecting
+                        )
+                    }
+                }
+            }
+            launch {
+                session.sshSessionId.collect { sshSessionId ->
+                    updateTabState(sessionId) { it.copy(sshSessionId = sshSessionId) }
+                }
+            }
+            launch {
+                session.connectedAtMs.collect { connectedAtMs ->
+                    updateTabState(sessionId) { it.copy(connectedAtMs = connectedAtMs) }
+                }
+            }
+        }
+        sessionJobs[sessionId] = job
+    }
+
+    private fun updateTabState(sessionId: String, update: (TerminalTabState) -> TerminalTabState) {
+        _uiState.update { state ->
+            val newTabs = state.tabs.map { tab ->
+                if (tab.sessionId == sessionId) update(tab) else tab
+            }
+            state.copy(tabs = newTabs)
+        }
+    }
+
+    private fun connectSession(sessionId: String) {
         viewModelScope.launch {
-            _uiState.value = _uiState.value.copy(isConnecting = true, error = null)
+            updateTabState(sessionId) { it.copy(isConnecting = true, error = null) }
             try {
                 val entity = connectionRepository.getConnectionById(connectionId)
                 if (entity == null) {
-                    _uiState.value = _uiState.value.copy(
-                        isConnecting = false,
-                        error = "Connection not found"
-                    )
+                    updateTabState(sessionId) { it.copy(isConnecting = false, error = "Connection not found") }
                     return@launch
                 }
-
-                _uiState.value = _uiState.value.copy(connectionName = entity.name)
 
                 val decryptedPassword = SimpleShellPcCryptoCompat.decryptNullableMaybe(entity.password)
                 val decryptedPassphrase =
@@ -114,57 +185,62 @@ class TerminalViewModel @Inject constructor(
                         Connection.AuthType.KEY else Connection.AuthType.PASSWORD
                 )
 
-                val didConnect = terminalSessionManager.connectIfNeeded(connection)
+                val didConnect = terminalSessionManager.connectIfNeeded(connection, sessionId)
                 if (didConnect) {
                     connectionRepository.updateLastConnectedAt(connectionId)
                 }
 
-                _uiState.value = _uiState.value.copy(isConnecting = false)
+                updateTabState(sessionId) { it.copy(isConnecting = false) }
             } catch (e: Exception) {
-                _uiState.value = _uiState.value.copy(
-                    isConnecting = false,
-                    error = "Connection failed: ${e.message}"
-                )
+                updateTabState(sessionId) { 
+                    it.copy(isConnecting = false, error = "Connection failed: ${e.message}") 
+                }
             }
         }
     }
 
     fun sendCommand(command: String) {
-        session.sendCommand(command)
+        val currentSessionId = _uiState.value.currentSessionId ?: return
+        terminalSessionManager.getSession(currentSessionId)?.sendCommand(command)
     }
 
     fun sendInput(input: String) {
-        session.sendInput(input)
+        val currentSessionId = _uiState.value.currentSessionId ?: return
+        terminalSessionManager.getSession(currentSessionId)?.sendInput(input)
     }
 
     fun setFontScale(scale: Float) {
         val clamped = clampFontScale(scale)
-        _uiState.value = _uiState.value.copy(fontScale = clamped)
+        _uiState.update { it.copy(fontScale = clamped) }
 
-        // Persist with a small debounce so pinch gestures don't spam DataStore edits.
         saveFontScaleJob?.cancel()
         saveFontScaleJob = viewModelScope.launch(Dispatchers.IO) {
-            // A short delay is enough to coalesce multiple quick updates.
             kotlinx.coroutines.delay(250)
             userPreferencesRepository.setTerminalFontScale(clamped)
         }
     }
 
-    fun reconnect() {
-        // Disconnect may block; do it on IO to avoid ANR.
+    fun reconnect(sessionId: String? = null) {
+        val targetSessionId = sessionId ?: _uiState.value.currentSessionId ?: return
+        val session = terminalSessionManager.getSession(targetSessionId) ?: return
+        
         viewModelScope.launch {
             withContext(Dispatchers.IO) {
                 session.disconnect()
             }
             session.clearOutput()
-            connect()
+            connectSession(targetSessionId)
         }
     }
 
     private fun clampFontScale(raw: Float): Float {
-        // Keep the range conservative: too small becomes unreadable; too large breaks layout.
         val min = 0.4f
         val max = 2.5f
         return raw.coerceIn(min, max)
+    }
+    
+    override fun onCleared() {
+        super.onCleared()
+        sessionJobs.values.forEach { it.cancel() }
     }
 }
