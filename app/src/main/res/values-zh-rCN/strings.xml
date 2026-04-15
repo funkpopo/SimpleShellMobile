@@ -13,6 +13,8 @@
     <string name="fingerprint_unlock">指纹解锁</string>
     <string name="fingerprint_unlock_desc">打开应用时需要指纹验证</string>
     <string name="fingerprint_unlock_not_supported">当前设备不支持</string>
+    <string name="fingerprint_master_password_unlock">指纹解锁主密码</string>
+    <string name="fingerprint_master_password_unlock_desc">允许使用指纹解锁已保存的 SimpleShell 桌面端主密码</string>
     <string name="data">数据</string>
     <string name="import_pc_config">导入 PC config.json</string>
     <string name="import_pc_config_desc">从 SimpleShell PC 的 config.json 导入连接与分组</string>
@@ -121,4 +123,11 @@
     <string name="pc_config_master_password_restore_message">WebDAV 上的 config.json 启用了 SimpleShell 桌面端的凭据保护。请输入桌面端主密码以恢复加密凭据。</string>
     <string name="pc_config_master_password_label">主密码</string>
     <string name="pc_config_master_password_confirm">解锁并继续</string>
+    <string name="pc_config_master_password_remember_biometric">在本设备记住此主密码，并允许用指纹解锁</string>
+    <string name="pc_config_master_password_use_biometric">使用指纹解锁已保存的主密码</string>
+    <string name="pc_config_master_password_use_biometric_title">解锁主密码</string>
+    <string name="pc_config_master_password_use_biometric_subtitle">请使用指纹认证以使用已保存的桌面端主密码</string>
+    <string name="pc_config_master_password_save_biometric_title">保存主密码</string>
+    <string name="pc_config_master_password_save_biometric_subtitle">请使用指纹认证以在本设备保护此桌面端主密码</string>
+    <string name="pc_config_master_password_biometric_unavailable">已保存的指纹主密码不可用，请重新输入主密码。</string>
 </resources>

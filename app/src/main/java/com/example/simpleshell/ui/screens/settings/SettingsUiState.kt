@@ -15,10 +15,12 @@ data class SettingsUiState(
     val webDavUsername: String = "",
     val webDavPassword: String = "",
     val fingerprintUnlockEnabled: Boolean = false,
+    val biometricMasterPasswordEnabled: Boolean = false,
     val updateCheckState: UpdateCheckState = UpdateCheckState.Idle,
     val importState: ImportState = ImportState.Idle,
     val syncState: SyncState = SyncState.Idle,
-    val credentialPrompt: CredentialPromptState? = null
+    val credentialPrompt: CredentialPromptState? = null,
+    val biometricSaveRequest: BiometricSaveRequest? = null
 )
 
 sealed class UpdateCheckState {
@@ -45,10 +47,15 @@ sealed class SyncState {
 
 data class CredentialPromptState(
     val mode: CredentialPromptMode,
-    val errorMessage: String? = null
+    val errorMessage: String? = null,
+    val secretScope: String? = null
 )
 
 enum class CredentialPromptMode {
     IMPORT_CONFIG,
     RESTORE_WEBDAV
 }
+
+data class BiometricSaveRequest(
+    val secretScope: String
+)

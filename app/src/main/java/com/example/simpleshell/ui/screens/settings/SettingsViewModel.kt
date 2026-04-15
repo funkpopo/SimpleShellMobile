@@ -1,5 +1,6 @@
 package com.example.simpleshell.ui.screens.settings
 
+import android.content.Context
 import android.content.ContentResolver
 import android.net.Uri
 import androidx.lifecycle.ViewModel
@@ -16,7 +17,9 @@ import com.example.simpleshell.data.remote.WebDavSyncManager
 import com.example.simpleshell.domain.model.Language
 import com.example.simpleshell.domain.model.ThemeColor
 import com.example.simpleshell.domain.model.ThemeMode
+import com.example.simpleshell.utils.BiometricMasterPasswordStore
 import dagger.hilt.android.lifecycle.HiltViewModel
+import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -24,10 +27,12 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import javax.crypto.Cipher
 import javax.inject.Inject
 
 @HiltViewModel
 class SettingsViewModel @Inject constructor(
+    @ApplicationContext private val appContext: Context,
     private val userPreferencesRepository: UserPreferencesRepository,
     private val updateChecker: UpdateChecker,
     private val pcConfigImporter: SimpleShellPcConfigImporter,
@@ -38,6 +43,8 @@ class SettingsViewModel @Inject constructor(
     private val _uiState = MutableStateFlow(SettingsUiState())
     val uiState: StateFlow<SettingsUiState> = _uiState.asStateFlow()
     private var pendingImportJson: String? = null
+    private var pendingBiometricSaveScope: String? = null
+    private var pendingBiometricSavePassword: String? = null
 
     init {
         viewModelScope.launch {
@@ -54,7 +61,8 @@ class SettingsViewModel @Inject constructor(
                         webDavUrl = prefs.webDavUrl,
                         webDavUsername = prefs.webDavUsername,
                         webDavPassword = prefs.webDavPassword,
-                        fingerprintUnlockEnabled = prefs.fingerprintUnlockEnabled
+                        fingerprintUnlockEnabled = prefs.fingerprintUnlockEnabled,
+                        biometricMasterPasswordEnabled = prefs.biometricMasterPasswordEnabled
                     )
                 }
         }
@@ -108,6 +116,17 @@ class SettingsViewModel @Inject constructor(
         }
     }
 
+    fun setBiometricMasterPasswordEnabled(enabled: Boolean) {
+        viewModelScope.launch {
+            userPreferencesRepository.setBiometricMasterPasswordEnabled(enabled)
+            if (!enabled) {
+                withContext(Dispatchers.IO) {
+                    BiometricMasterPasswordStore.clearAll(appContext)
+                }
+            }
+        }
+    }
+
     fun backupToWebDav() {
         if (_uiState.value.syncState is SyncState.Working) return
         viewModelScope.launch {
@@ -127,7 +146,7 @@ class SettingsViewModel @Inject constructor(
         if (_uiState.value.syncState is SyncState.Working) return
         viewModelScope.launch {
             _uiState.value = _uiState.value.copy(syncState = SyncState.Working)
-            restoreFromWebDavInternal(masterPassword = null)
+            restoreFromWebDavInternal(masterPassword = null, rememberForBiometric = false, fromBiometric = false)
         }
     }
 
@@ -164,7 +183,7 @@ class SettingsViewModel @Inject constructor(
 
         viewModelScope.launch {
             _uiState.value = _uiState.value.copy(importState = ImportState.Importing)
-            importPcConfigInternal(trimmed, masterPassword = null)
+            importPcConfigInternal(trimmed, masterPassword = null, rememberForBiometric = false, fromBiometric = false)
         }
     }
 
@@ -208,7 +227,11 @@ class SettingsViewModel @Inject constructor(
         _uiState.value = _uiState.value.copy(importState = ImportState.Idle)
     }
 
-    fun submitCredentialPrompt(masterPassword: String) {
+    fun submitCredentialPrompt(
+        masterPassword: String,
+        rememberForBiometric: Boolean = false,
+        fromBiometric: Boolean = false
+    ) {
         val prompt = _uiState.value.credentialPrompt ?: return
         if ((_uiState.value.syncState is SyncState.Working) || (_uiState.value.importState is ImportState.Importing)) {
             return
@@ -219,12 +242,12 @@ class SettingsViewModel @Inject constructor(
                 CredentialPromptMode.IMPORT_CONFIG -> {
                     val json = pendingImportJson ?: return@launch
                     _uiState.value = _uiState.value.copy(importState = ImportState.Importing)
-                    importPcConfigInternal(json, masterPassword)
+                    importPcConfigInternal(json, masterPassword, rememberForBiometric, fromBiometric)
                 }
 
                 CredentialPromptMode.RESTORE_WEBDAV -> {
                     _uiState.value = _uiState.value.copy(syncState = SyncState.Working)
-                    restoreFromWebDavInternal(masterPassword)
+                    restoreFromWebDavInternal(masterPassword, rememberForBiometric, fromBiometric)
                 }
             }
         }
@@ -235,23 +258,72 @@ class SettingsViewModel @Inject constructor(
         _uiState.value = _uiState.value.copy(credentialPrompt = null)
     }
 
-    private suspend fun importPcConfigInternal(jsonText: String, masterPassword: String?) {
+    fun updateCredentialPromptError(message: String) {
+        val prompt = _uiState.value.credentialPrompt ?: return
+        _uiState.value = _uiState.value.copy(
+            credentialPrompt = prompt.copy(errorMessage = message)
+        )
+    }
+
+    fun completeBiometricSave(cipher: Cipher) {
+        val scope = pendingBiometricSaveScope
+        val password = pendingBiometricSavePassword
+        pendingBiometricSaveScope = null
+        pendingBiometricSavePassword = null
+        if (scope.isNullOrBlank() || password.isNullOrEmpty()) {
+            _uiState.value = _uiState.value.copy(biometricSaveRequest = null)
+            return
+        }
+
+        try {
+            BiometricMasterPasswordStore.saveSecret(appContext, scope, password, cipher)
+            _uiState.value = _uiState.value.copy(biometricSaveRequest = null)
+        } catch (e: Exception) {
+            _uiState.value = _uiState.value.copy(
+                biometricSaveRequest = null,
+                syncState = SyncState.Error(e.message ?: "Failed to save biometric master password")
+            )
+        }
+    }
+
+    fun dismissBiometricSaveRequest() {
+        pendingBiometricSaveScope = null
+        pendingBiometricSavePassword = null
+        _uiState.value = _uiState.value.copy(biometricSaveRequest = null)
+    }
+
+    private suspend fun importPcConfigInternal(
+        jsonText: String,
+        masterPassword: String?,
+        rememberForBiometric: Boolean,
+        fromBiometric: Boolean
+    ) {
         try {
             val summary = withContext(Dispatchers.IO) {
                 pcConfigImporter.importFromConfigJson(jsonText, masterPassword)
             }
+            val scope = _uiState.value.credentialPrompt?.secretScope
             pendingImportJson = null
             _uiState.value = _uiState.value.copy(
                 importState = ImportState.Success(summary),
                 credentialPrompt = null
             )
+            requestBiometricSaveIfNeeded(scope, masterPassword, rememberForBiometric)
         } catch (e: SimpleShellPcInvalidMasterPasswordException) {
+            if (fromBiometric) {
+                BiometricMasterPasswordStore.clearSecret(appContext, e.securityRandomKey)
+            }
             pendingImportJson = jsonText
             _uiState.value = _uiState.value.copy(
                 importState = ImportState.Idle,
                 credentialPrompt = CredentialPromptState(
                     mode = CredentialPromptMode.IMPORT_CONFIG,
-                    errorMessage = e.message ?: "Invalid master password"
+                    errorMessage = if (fromBiometric) {
+                        "Saved fingerprint master password is invalid. Enter the master password again."
+                    } else {
+                        e.message ?: "Invalid master password"
+                    },
+                    secretScope = e.securityRandomKey
                 )
             )
         } catch (e: SimpleShellPcCredentialLockedException) {
@@ -260,7 +332,8 @@ class SettingsViewModel @Inject constructor(
                 importState = ImportState.Idle,
                 credentialPrompt = CredentialPromptState(
                     mode = CredentialPromptMode.IMPORT_CONFIG,
-                    errorMessage = null
+                    errorMessage = null,
+                    secretScope = e.securityRandomKey
                 )
             )
         } catch (e: Exception) {
@@ -272,16 +345,28 @@ class SettingsViewModel @Inject constructor(
         }
     }
 
-    private suspend fun restoreFromWebDavInternal(masterPassword: String?) {
+    private suspend fun restoreFromWebDavInternal(
+        masterPassword: String?,
+        rememberForBiometric: Boolean,
+        fromBiometric: Boolean
+    ) {
         val result = webDavSyncManager.restore(masterPassword)
         val failure = result.exceptionOrNull()
         when (failure) {
             is SimpleShellPcInvalidMasterPasswordException -> {
+                if (fromBiometric) {
+                    BiometricMasterPasswordStore.clearSecret(appContext, failure.securityRandomKey)
+                }
                 _uiState.value = _uiState.value.copy(
                     syncState = SyncState.Idle,
                     credentialPrompt = CredentialPromptState(
                         mode = CredentialPromptMode.RESTORE_WEBDAV,
-                        errorMessage = failure.message ?: "Invalid master password"
+                        errorMessage = if (fromBiometric) {
+                            "Saved fingerprint master password is invalid. Enter the master password again."
+                        } else {
+                            failure.message ?: "Invalid master password"
+                        },
+                        secretScope = failure.securityRandomKey
                     )
                 )
             }
@@ -291,16 +376,19 @@ class SettingsViewModel @Inject constructor(
                     syncState = SyncState.Idle,
                     credentialPrompt = CredentialPromptState(
                         mode = CredentialPromptMode.RESTORE_WEBDAV,
-                        errorMessage = null
+                        errorMessage = null,
+                        secretScope = failure.securityRandomKey
                     )
                 )
             }
 
             null -> {
+                val scope = _uiState.value.credentialPrompt?.secretScope
                 _uiState.value = _uiState.value.copy(
                     syncState = SyncState.Success("Restore from WebDAV successful"),
                     credentialPrompt = null
                 )
+                requestBiometricSaveIfNeeded(scope, masterPassword, rememberForBiometric)
             }
 
             else -> {
@@ -310,5 +398,20 @@ class SettingsViewModel @Inject constructor(
                 )
             }
         }
+    }
+
+    private fun requestBiometricSaveIfNeeded(
+        scope: String?,
+        masterPassword: String?,
+        rememberForBiometric: Boolean
+    ) {
+        if (!rememberForBiometric || scope.isNullOrBlank() || masterPassword.isNullOrEmpty()) return
+        if (!_uiState.value.biometricMasterPasswordEnabled) return
+
+        pendingBiometricSaveScope = scope
+        pendingBiometricSavePassword = masterPassword
+        _uiState.value = _uiState.value.copy(
+            biometricSaveRequest = BiometricSaveRequest(scope)
+        )
     }
 }

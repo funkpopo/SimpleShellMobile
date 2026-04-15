@@ -47,9 +47,15 @@ data class SimpleShellPcSecurityConfig(
     }
 }
 
-class SimpleShellPcCredentialLockedException(message: String) : IllegalStateException(message)
+class SimpleShellPcCredentialLockedException(
+    val securityRandomKey: String,
+    message: String
+) : IllegalStateException(message)
 
-class SimpleShellPcInvalidMasterPasswordException(message: String) : IllegalArgumentException(message)
+class SimpleShellPcInvalidMasterPasswordException(
+    val securityRandomKey: String,
+    message: String
+) : IllegalArgumentException(message)
 
 /**
  * Desktop SimpleShell credential cipher.
@@ -200,7 +206,7 @@ object SimpleShellPcCryptoCompat {
             val derivedKey = deriveEncryptionKey(config.randomKey, masterPassword)
             val actualVerifier = createMasterPasswordVerifier(derivedKey)
             if (!constantTimeHexEquals(config.masterPasswordVerifier, actualVerifier)) {
-                throw SimpleShellPcInvalidMasterPasswordException("Invalid master password")
+                throw SimpleShellPcInvalidMasterPasswordException(config.randomKey, "Invalid master password")
             }
 
             activeKey = derivedKey
@@ -248,7 +254,7 @@ object SimpleShellPcCryptoCompat {
     private fun activeCipher(): SimpleShellPcCredentialCipher {
         synchronized(monitor) {
             val config = securityConfig ?: loadOrCreateSecurityConfig().also(::configureInMemory)
-            val key = activeKey ?: throw SimpleShellPcCredentialLockedException("Credential store is locked")
+            val key = activeKey ?: throw SimpleShellPcCredentialLockedException(config.randomKey, "Credential store is locked")
             return SimpleShellPcCredentialCipher(config, key)
         }
     }
@@ -342,13 +348,13 @@ private fun deriveAndVerifyKey(
     }
 
     if (masterPassword.isNullOrEmpty()) {
-        throw SimpleShellPcCredentialLockedException("Master password is required")
+        throw SimpleShellPcCredentialLockedException(config.randomKey, "Master password is required")
     }
 
     val derivedKey = deriveEncryptionKey(config.randomKey, masterPassword)
     val actualVerifier = createMasterPasswordVerifier(derivedKey)
     if (!constantTimeHexEquals(config.masterPasswordVerifier, actualVerifier)) {
-        throw SimpleShellPcInvalidMasterPasswordException("Invalid master password")
+        throw SimpleShellPcInvalidMasterPasswordException(config.randomKey, "Invalid master password")
     }
     return derivedKey
 }

@@ -18,5 +18,6 @@ data class UserPreferences(
     val webDavUrl: String = "",
     val webDavUsername: String = "",
     val webDavPassword: String = "",
-    val fingerprintUnlockEnabled: Boolean = false
+    val fingerprintUnlockEnabled: Boolean = false,
+    val biometricMasterPasswordEnabled: Boolean = false
 )

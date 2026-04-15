@@ -36,6 +36,7 @@ class UserPreferencesRepository @Inject constructor(
         val WEBDAV_USERNAME: Preferences.Key<String> = stringPreferencesKey("webdav_username")
         val WEBDAV_PASSWORD: Preferences.Key<String> = stringPreferencesKey("webdav_password")
         val FINGERPRINT_UNLOCK_ENABLED: Preferences.Key<Boolean> = booleanPreferencesKey("fingerprint_unlock_enabled")
+        val BIOMETRIC_MASTER_PASSWORD_ENABLED: Preferences.Key<Boolean> = booleanPreferencesKey("biometric_master_password_enabled")
     }
 
     val preferences: Flow<UserPreferences> = context.userPreferencesDataStore.data
@@ -49,7 +50,8 @@ class UserPreferencesRepository @Inject constructor(
                 webDavUrl = prefs[Keys.WEBDAV_URL] ?: "",
                 webDavUsername = prefs[Keys.WEBDAV_USERNAME] ?: "",
                 webDavPassword = prefs[Keys.WEBDAV_PASSWORD] ?: "",
-                fingerprintUnlockEnabled = prefs[Keys.FINGERPRINT_UNLOCK_ENABLED] ?: false
+                fingerprintUnlockEnabled = prefs[Keys.FINGERPRINT_UNLOCK_ENABLED] ?: false,
+                biometricMasterPasswordEnabled = prefs[Keys.BIOMETRIC_MASTER_PASSWORD_ENABLED] ?: false
             )
         }
 
@@ -104,6 +106,12 @@ class UserPreferencesRepository @Inject constructor(
     suspend fun setFingerprintUnlockEnabled(enabled: Boolean) {
         context.userPreferencesDataStore.edit { prefs ->
             prefs[Keys.FINGERPRINT_UNLOCK_ENABLED] = enabled
+        }
+    }
+
+    suspend fun setBiometricMasterPasswordEnabled(enabled: Boolean) {
+        context.userPreferencesDataStore.edit { prefs ->
+            prefs[Keys.BIOMETRIC_MASTER_PASSWORD_ENABLED] = enabled
         }
     }
 

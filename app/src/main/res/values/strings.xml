@@ -12,6 +12,8 @@
     <string name="fingerprint_unlock">Fingerprint Unlock</string>
     <string name="fingerprint_unlock_desc">Require fingerprint authentication when opening the app</string>
     <string name="fingerprint_unlock_not_supported">Not supported on this device</string>
+    <string name="fingerprint_master_password_unlock">Fingerprint Unlock Master Password</string>
+    <string name="fingerprint_master_password_unlock_desc">Allow saved SimpleShell desktop master passwords to be unlocked with fingerprint authentication</string>
     <string name="data">Data</string>
     <string name="import_pc_config">Import PC config.json</string>
     <string name="import_pc_config_desc">Import connections/groups from SimpleShell (PC) config.json</string>
@@ -120,4 +122,11 @@
     <string name="pc_config_master_password_restore_message">The WebDAV config.json uses SimpleShell desktop credential protection. Enter the desktop master password to restore the encrypted credentials.</string>
     <string name="pc_config_master_password_label">Master password</string>
     <string name="pc_config_master_password_confirm">Unlock and continue</string>
+    <string name="pc_config_master_password_remember_biometric">Remember this master password and unlock it with fingerprint on this device</string>
+    <string name="pc_config_master_password_use_biometric">Use fingerprint to unlock saved master password</string>
+    <string name="pc_config_master_password_use_biometric_title">Unlock Master Password</string>
+    <string name="pc_config_master_password_use_biometric_subtitle">Authenticate with fingerprint to use the saved desktop master password</string>
+    <string name="pc_config_master_password_save_biometric_title">Save Master Password</string>
+    <string name="pc_config_master_password_save_biometric_subtitle">Authenticate with fingerprint to protect this desktop master password on this device</string>
+    <string name="pc_config_master_password_biometric_unavailable">Saved fingerprint master password is unavailable. Enter the master password again.</string>
 </resources>

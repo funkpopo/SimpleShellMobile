@@ -37,6 +37,7 @@ import androidx.compose.material.icons.filled.Palette
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.outlined.Code
+import androidx.compose.material3.Checkbox
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.material3.AlertDialog
@@ -53,6 +54,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -75,6 +77,8 @@ import com.example.simpleshell.domain.model.Language
 import com.example.simpleshell.domain.model.ThemeColor
 import com.example.simpleshell.domain.model.ThemeMode
 import com.example.simpleshell.utils.BiometricHelper
+import com.example.simpleshell.utils.BiometricMasterPasswordStore
+import androidx.fragment.app.FragmentActivity
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -89,6 +93,39 @@ fun SettingsScreen(
     var aboutExpanded by remember { mutableStateOf(false) }
     val uriHandler = LocalUriHandler.current
     val context = LocalContext.current
+    val activity = context as FragmentActivity
+    val isBiometricStrongAvailable = remember { BiometricHelper.isBiometricStrongAvailable(context) }
+
+    uiState.biometricSaveRequest?.let { request ->
+        val saveTitle = stringResource(R.string.pc_config_master_password_save_biometric_title)
+        val saveSubtitle = stringResource(R.string.pc_config_master_password_save_biometric_subtitle)
+        LaunchedEffect(request.secretScope) {
+            val cryptoObject = runCatching {
+                BiometricMasterPasswordStore.createEncryptionCryptoObject(request.secretScope)
+            }.getOrNull()
+            if (cryptoObject == null) {
+                viewModel.dismissBiometricSaveRequest()
+                return@LaunchedEffect
+            }
+
+            BiometricHelper.showBiometricCryptoPrompt(
+                activity = activity,
+                cryptoObject = cryptoObject,
+                title = saveTitle,
+                subtitle = saveSubtitle,
+                onSuccess = { result ->
+                    val cipher = result.cryptoObject?.cipher
+                    if (cipher != null) {
+                        viewModel.completeBiometricSave(cipher)
+                    } else {
+                        viewModel.dismissBiometricSaveRequest()
+                    }
+                },
+                onError = { _, _ -> viewModel.dismissBiometricSaveRequest() },
+                onFailed = { }
+            )
+        }
+    }
 
     val configFilePicker = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.OpenDocument()
@@ -252,6 +289,20 @@ fun SettingsScreen(
 
     uiState.credentialPrompt?.let { prompt ->
         var masterPassword by remember(prompt.mode, prompt.errorMessage) { mutableStateOf("") }
+        var rememberWithFingerprint by remember(prompt.mode, prompt.errorMessage, prompt.secretScope) {
+            mutableStateOf(false)
+        }
+        val canUseStoredFingerprintPassword =
+            uiState.biometricMasterPasswordEnabled &&
+                isBiometricStrongAvailable &&
+                prompt.secretScope != null &&
+                BiometricMasterPasswordStore.hasStoredSecret(context, prompt.secretScope)
+        val canSaveWithFingerprint =
+            uiState.biometricMasterPasswordEnabled &&
+                isBiometricStrongAvailable &&
+                prompt.secretScope != null
+        val unlockTitle = stringResource(R.string.pc_config_master_password_use_biometric_title)
+        val unlockSubtitle = stringResource(R.string.pc_config_master_password_use_biometric_subtitle)
         AlertDialog(
             onDismissRequest = { viewModel.dismissCredentialPrompt() },
             title = { Text(stringResource(R.string.pc_config_master_password_title)) },
@@ -282,11 +333,91 @@ fun SettingsScreen(
                         visualTransformation = PasswordVisualTransformation(),
                         modifier = Modifier.fillMaxWidth()
                     )
+
+                    if (canUseStoredFingerprintPassword) {
+                        TextButton(
+                            onClick = {
+                                val scope = prompt.secretScope ?: return@TextButton
+                                val cryptoObject = BiometricMasterPasswordStore
+                                    .createDecryptionCryptoObject(context, scope)
+                                if (cryptoObject == null) {
+                                    viewModel.updateCredentialPromptError(
+                                        context.getString(R.string.pc_config_master_password_biometric_unavailable)
+                                    )
+                                    return@TextButton
+                                }
+
+                                BiometricHelper.showBiometricCryptoPrompt(
+                                    activity = activity,
+                                    cryptoObject = cryptoObject,
+                                    title = unlockTitle,
+                                    subtitle = unlockSubtitle,
+                                    onSuccess = { result ->
+                                        val cipher = result.cryptoObject?.cipher
+                                        if (cipher == null) {
+                                            viewModel.updateCredentialPromptError(
+                                                context.getString(R.string.pc_config_master_password_biometric_unavailable)
+                                            )
+                                            return@showBiometricCryptoPrompt
+                                        }
+
+                                        try {
+                                            val savedPassword = BiometricMasterPasswordStore.decryptSecret(
+                                                context,
+                                                scope,
+                                                cipher
+                                            )
+                                            viewModel.submitCredentialPrompt(
+                                                masterPassword = savedPassword,
+                                                rememberForBiometric = false,
+                                                fromBiometric = true
+                                            )
+                                        } catch (_: Exception) {
+                                            BiometricMasterPasswordStore.clearSecret(context, scope)
+                                            viewModel.updateCredentialPromptError(
+                                                context.getString(R.string.pc_config_master_password_biometric_unavailable)
+                                            )
+                                        }
+                                    },
+                                    onError = { _, message ->
+                                        viewModel.updateCredentialPromptError(message.toString())
+                                    },
+                                    onFailed = { }
+                                )
+                            }
+                        ) {
+                            Text(stringResource(R.string.pc_config_master_password_use_biometric))
+                        }
+                    }
+
+                    if (canSaveWithFingerprint) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable { rememberWithFingerprint = !rememberWithFingerprint }
+                        ) {
+                            Checkbox(
+                                checked = rememberWithFingerprint,
+                                onCheckedChange = { rememberWithFingerprint = it }
+                            )
+                            Text(
+                                text = stringResource(R.string.pc_config_master_password_remember_biometric),
+                                style = MaterialTheme.typography.bodyMedium
+                            )
+                        }
+                    }
                 }
             },
             confirmButton = {
                 TextButton(
-                    onClick = { viewModel.submitCredentialPrompt(masterPassword) },
+                    onClick = {
+                        viewModel.submitCredentialPrompt(
+                            masterPassword = masterPassword,
+                            rememberForBiometric = rememberWithFingerprint,
+                            fromBiometric = false
+                        )
+                    },
                     enabled = masterPassword.isNotBlank()
                 ) {
                     Text(stringResource(R.string.pc_config_master_password_confirm))
@@ -421,6 +552,31 @@ fun SettingsScreen(
                             checked = uiState.fingerprintUnlockEnabled && isBiometricAvailable,
                             onCheckedChange = viewModel::setFingerprintUnlockEnabled,
                             enabled = isBiometricAvailable
+                        )
+                    }
+                )
+            }
+
+            item {
+                ListItem(
+                    headlineContent = { Text(stringResource(R.string.fingerprint_master_password_unlock)) },
+                    supportingContent = {
+                        Text(
+                            if (isBiometricStrongAvailable) {
+                                stringResource(R.string.fingerprint_master_password_unlock_desc)
+                            } else {
+                                stringResource(R.string.fingerprint_unlock_not_supported)
+                            }
+                        )
+                    },
+                    leadingContent = {
+                        Icon(Icons.Default.Fingerprint, contentDescription = null)
+                    },
+                    trailingContent = {
+                        Switch(
+                            checked = uiState.biometricMasterPasswordEnabled && isBiometricStrongAvailable,
+                            onCheckedChange = viewModel::setBiometricMasterPasswordEnabled,
+                            enabled = isBiometricStrongAvailable
                         )
                     }
                 )
