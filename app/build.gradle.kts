@@ -61,6 +61,8 @@ android {
         // Triggered by sshj's transitive BouncyCastle dependency; not directly actionable in this app code.
         disable += "TrustAllX509TrustManager"
     }
+    buildToolsVersion = "35.0.0"
+    ndkVersion = "28.2.13676358"
 
     applicationVariants.all {
         val variant = this
