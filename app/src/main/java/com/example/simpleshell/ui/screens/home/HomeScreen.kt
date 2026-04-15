@@ -314,13 +314,22 @@ private fun ConnectionRow(
         )
     }
 
-    Card(
+    ElevatedCard(
         modifier = modifier
             .fillMaxWidth()
             .animateContentSize(),
-        elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
+        elevation = CardDefaults.elevatedCardElevation(defaultElevation = 2.dp),
+        shape = MaterialTheme.shapes.medium,
+        colors = CardDefaults.elevatedCardColors(
+            containerColor = if (isTerminalConnected) {
+                MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.3f)
+            } else {
+                MaterialTheme.colorScheme.surface
+            }
+        )
     ) {
         ListItem(
+            colors = ListItemDefaults.colors(containerColor = Color.Transparent),
             leadingContent = {
                 val dotColor = if (isTerminalConnected) Color(0xFF4CAF50) else MaterialTheme.colorScheme.outlineVariant
                 Box(
@@ -404,6 +413,11 @@ private fun ConnectionRow(
         )
 
         if (isTerminalConnected && resourceStats != null) {
+            HorizontalDivider(
+                modifier = Modifier.padding(horizontal = 16.dp),
+                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.1f)
+            )
+            Spacer(modifier = Modifier.height(8.dp))
             ResourceBars(stats = resourceStats)
         }
     }
