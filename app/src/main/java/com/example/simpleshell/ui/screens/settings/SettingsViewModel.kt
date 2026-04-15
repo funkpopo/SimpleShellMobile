@@ -7,6 +7,8 @@ import androidx.lifecycle.viewModelScope
 import com.example.simpleshell.BuildConfig
 import com.example.simpleshell.data.importing.SimpleShellPcConfigExporter
 import com.example.simpleshell.data.importing.SimpleShellPcConfigImporter
+import com.example.simpleshell.data.importing.SimpleShellPcCredentialLockedException
+import com.example.simpleshell.data.importing.SimpleShellPcInvalidMasterPasswordException
 import com.example.simpleshell.data.local.preferences.UserPreferencesRepository
 import com.example.simpleshell.data.remote.UpdateCheckResult
 import com.example.simpleshell.data.remote.UpdateChecker
@@ -35,6 +37,7 @@ class SettingsViewModel @Inject constructor(
 
     private val _uiState = MutableStateFlow(SettingsUiState())
     val uiState: StateFlow<SettingsUiState> = _uiState.asStateFlow()
+    private var pendingImportJson: String? = null
 
     init {
         viewModelScope.launch {
@@ -124,14 +127,7 @@ class SettingsViewModel @Inject constructor(
         if (_uiState.value.syncState is SyncState.Working) return
         viewModelScope.launch {
             _uiState.value = _uiState.value.copy(syncState = SyncState.Working)
-            val result = webDavSyncManager.restore()
-            _uiState.value = _uiState.value.copy(
-                syncState = if (result.isSuccess) {
-                    SyncState.Success("Restore from WebDAV successful")
-                } else {
-                    SyncState.Error(result.exceptionOrNull()?.message ?: "Restore failed")
-                }
-            )
+            restoreFromWebDavInternal(masterPassword = null)
         }
     }
 
@@ -168,16 +164,7 @@ class SettingsViewModel @Inject constructor(
 
         viewModelScope.launch {
             _uiState.value = _uiState.value.copy(importState = ImportState.Importing)
-            try {
-                val summary = withContext(Dispatchers.IO) {
-                    pcConfigImporter.importFromConfigJson(trimmed)
-                }
-                _uiState.value = _uiState.value.copy(importState = ImportState.Success(summary))
-            } catch (e: Exception) {
-                _uiState.value = _uiState.value.copy(
-                    importState = ImportState.Error(e.message ?: "Import failed")
-                )
-            }
+            importPcConfigInternal(trimmed, masterPassword = null)
         }
     }
 
@@ -219,5 +206,109 @@ class SettingsViewModel @Inject constructor(
 
     fun dismissImportDialog() {
         _uiState.value = _uiState.value.copy(importState = ImportState.Idle)
+    }
+
+    fun submitCredentialPrompt(masterPassword: String) {
+        val prompt = _uiState.value.credentialPrompt ?: return
+        if ((_uiState.value.syncState is SyncState.Working) || (_uiState.value.importState is ImportState.Importing)) {
+            return
+        }
+
+        viewModelScope.launch {
+            when (prompt.mode) {
+                CredentialPromptMode.IMPORT_CONFIG -> {
+                    val json = pendingImportJson ?: return@launch
+                    _uiState.value = _uiState.value.copy(importState = ImportState.Importing)
+                    importPcConfigInternal(json, masterPassword)
+                }
+
+                CredentialPromptMode.RESTORE_WEBDAV -> {
+                    _uiState.value = _uiState.value.copy(syncState = SyncState.Working)
+                    restoreFromWebDavInternal(masterPassword)
+                }
+            }
+        }
+    }
+
+    fun dismissCredentialPrompt() {
+        pendingImportJson = null
+        _uiState.value = _uiState.value.copy(credentialPrompt = null)
+    }
+
+    private suspend fun importPcConfigInternal(jsonText: String, masterPassword: String?) {
+        try {
+            val summary = withContext(Dispatchers.IO) {
+                pcConfigImporter.importFromConfigJson(jsonText, masterPassword)
+            }
+            pendingImportJson = null
+            _uiState.value = _uiState.value.copy(
+                importState = ImportState.Success(summary),
+                credentialPrompt = null
+            )
+        } catch (e: SimpleShellPcInvalidMasterPasswordException) {
+            pendingImportJson = jsonText
+            _uiState.value = _uiState.value.copy(
+                importState = ImportState.Idle,
+                credentialPrompt = CredentialPromptState(
+                    mode = CredentialPromptMode.IMPORT_CONFIG,
+                    errorMessage = e.message ?: "Invalid master password"
+                )
+            )
+        } catch (e: SimpleShellPcCredentialLockedException) {
+            pendingImportJson = jsonText
+            _uiState.value = _uiState.value.copy(
+                importState = ImportState.Idle,
+                credentialPrompt = CredentialPromptState(
+                    mode = CredentialPromptMode.IMPORT_CONFIG,
+                    errorMessage = null
+                )
+            )
+        } catch (e: Exception) {
+            pendingImportJson = null
+            _uiState.value = _uiState.value.copy(
+                importState = ImportState.Error(e.message ?: "Import failed"),
+                credentialPrompt = null
+            )
+        }
+    }
+
+    private suspend fun restoreFromWebDavInternal(masterPassword: String?) {
+        val result = webDavSyncManager.restore(masterPassword)
+        val failure = result.exceptionOrNull()
+        when (failure) {
+            is SimpleShellPcInvalidMasterPasswordException -> {
+                _uiState.value = _uiState.value.copy(
+                    syncState = SyncState.Idle,
+                    credentialPrompt = CredentialPromptState(
+                        mode = CredentialPromptMode.RESTORE_WEBDAV,
+                        errorMessage = failure.message ?: "Invalid master password"
+                    )
+                )
+            }
+
+            is SimpleShellPcCredentialLockedException -> {
+                _uiState.value = _uiState.value.copy(
+                    syncState = SyncState.Idle,
+                    credentialPrompt = CredentialPromptState(
+                        mode = CredentialPromptMode.RESTORE_WEBDAV,
+                        errorMessage = null
+                    )
+                )
+            }
+
+            null -> {
+                _uiState.value = _uiState.value.copy(
+                    syncState = SyncState.Success("Restore from WebDAV successful"),
+                    credentialPrompt = null
+                )
+            }
+
+            else -> {
+                _uiState.value = _uiState.value.copy(
+                    syncState = SyncState.Error(failure.message ?: "Restore failed"),
+                    credentialPrompt = null
+                )
+            }
+        }
     }
 }

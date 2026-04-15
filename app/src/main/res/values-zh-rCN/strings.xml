@@ -116,4 +116,9 @@
     <string name="import_pc_config_error_title">导入失败</string>
     <string name="import_pc_config_empty">配置文件为空</string>
     <string name="import_pc_config_read_error">读取配置失败: %1$s</string>
+    <string name="pc_config_master_password_title">需要主密码</string>
+    <string name="pc_config_master_password_import_message">这个 config.json 启用了 SimpleShell 桌面端的凭据保护。请输入桌面端主密码以导入加密凭据。</string>
+    <string name="pc_config_master_password_restore_message">WebDAV 上的 config.json 启用了 SimpleShell 桌面端的凭据保护。请输入桌面端主密码以恢复加密凭据。</string>
+    <string name="pc_config_master_password_label">主密码</string>
+    <string name="pc_config_master_password_confirm">解锁并继续</string>
 </resources>

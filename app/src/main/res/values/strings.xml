@@ -115,4 +115,9 @@
     <string name="import_pc_config_error_title">Import failed</string>
     <string name="import_pc_config_empty">Config file is empty</string>
     <string name="import_pc_config_read_error">Failed to read config: %1$s</string>
+    <string name="pc_config_master_password_title">Master Password Required</string>
+    <string name="pc_config_master_password_import_message">This config.json uses SimpleShell desktop credential protection. Enter the desktop master password to import the encrypted credentials.</string>
+    <string name="pc_config_master_password_restore_message">The WebDAV config.json uses SimpleShell desktop credential protection. Enter the desktop master password to restore the encrypted credentials.</string>
+    <string name="pc_config_master_password_label">Master password</string>
+    <string name="pc_config_master_password_confirm">Unlock and continue</string>
 </resources>

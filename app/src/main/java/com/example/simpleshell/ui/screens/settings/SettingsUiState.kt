@@ -17,7 +17,8 @@ data class SettingsUiState(
     val fingerprintUnlockEnabled: Boolean = false,
     val updateCheckState: UpdateCheckState = UpdateCheckState.Idle,
     val importState: ImportState = ImportState.Idle,
-    val syncState: SyncState = SyncState.Idle
+    val syncState: SyncState = SyncState.Idle,
+    val credentialPrompt: CredentialPromptState? = null
 )
 
 sealed class UpdateCheckState {
@@ -40,4 +41,14 @@ sealed class SyncState {
     data object Working : SyncState()
     data class Success(val message: String) : SyncState()
     data class Error(val message: String) : SyncState()
+}
+
+data class CredentialPromptState(
+    val mode: CredentialPromptMode,
+    val errorMessage: String? = null
+)
+
+enum class CredentialPromptMode {
+    IMPORT_CONFIG,
+    RESTORE_WEBDAV
 }

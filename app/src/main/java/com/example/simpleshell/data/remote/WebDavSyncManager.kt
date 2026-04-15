@@ -51,7 +51,7 @@ class WebDavSyncManager @Inject constructor(
         }
     }
 
-    suspend fun restore(): Result<Unit> = withContext(Dispatchers.IO) {
+    suspend fun restore(masterPassword: String? = null): Result<Unit> = withContext(Dispatchers.IO) {
         try {
             val prefs = userPreferencesRepository.preferences.first()
             val url = prefs.webDavUrl.trimEnd('/')
@@ -74,7 +74,7 @@ class WebDavSyncManager @Inject constructor(
                 response.body?.string() ?: return@withContext Result.failure(Exception("Empty response body"))
             }
 
-            pcConfigImporter.importFromConfigJson(configJson)
+            pcConfigImporter.importFromConfigJson(configJson, masterPassword)
             Result.success(Unit)
         } catch (e: Exception) {
             Result.failure(e)

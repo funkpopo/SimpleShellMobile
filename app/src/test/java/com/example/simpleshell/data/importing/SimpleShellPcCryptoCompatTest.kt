@@ -1,59 +1,49 @@
 package com.example.simpleshell.data.importing
 
 import org.junit.Assert.assertEquals
-import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class SimpleShellPcCryptoCompatTest {
-
     @Test
-    fun decryptTextOrNull_decryptsNodeAes256CbcPayload() {
-        // Generated via Node.js using the PC project's algorithm with:
-        // key = sha256("simple-shell-encryption-key-12345")
-        // iv  = 000102030405060708090a0b0c0d0e0f
-        // plaintext = "hello-world"
-        val encrypted = "000102030405060708090a0b0c0d0e0f:a3b92e1434a53ebf539b43bc77e80839"
+    fun decryptsDesktopMasterPasswordPayload() {
+        val config = SimpleShellPcSecurityConfig(
+            randomKey = "abcdefghijklmnopqrstuvwxyzABCDEF",
+            masterPasswordEnabled = true,
+            masterPasswordVerifier = "3b580f7574f34230b267e684d6163a8257da40926048153a0579df2c58421f44"
+        )
+        val desktopPayload =
+            "ssv2:00112233445566778899aabb:33a50eb6dfc11b23e8715296c7e6354a:bc9d8c805fdf88e1"
 
-        val decrypted = SimpleShellPcCryptoCompat.decryptTextOrNull(encrypted)
+        val cipher = SimpleShellPcCryptoCompat.createCipher(config, "secret123")
 
-        assertEquals("hello-world", decrypted)
+        assertEquals("p@ssw0rd", cipher.decryptText(desktopPayload))
+        assertEquals(desktopPayload, cipher.encryptMaybe(desktopPayload))
+    }
+
+    @Test(expected = SimpleShellPcInvalidMasterPasswordException::class)
+    fun rejectsInvalidDesktopMasterPassword() {
+        val config = SimpleShellPcSecurityConfig(
+            randomKey = "abcdefghijklmnopqrstuvwxyzABCDEF",
+            masterPasswordEnabled = true,
+            masterPasswordVerifier = "3b580f7574f34230b267e684d6163a8257da40926048153a0579df2c58421f44"
+        )
+
+        SimpleShellPcCryptoCompat.createCipher(config, "wrong-password")
     }
 
     @Test
-    fun decryptMaybe_returnsPlaintextAsIs() {
-        assertEquals("plain", SimpleShellPcCryptoCompat.decryptMaybe("plain"))
-        assertEquals("", SimpleShellPcCryptoCompat.decryptMaybe(""))
-        assertEquals("plain", SimpleShellPcCryptoCompat.decryptMaybe("  plain  "))
-    }
+    fun encryptsAndDecryptsSsv2WithoutMasterPassword() {
+        val config = SimpleShellPcSecurityConfig(
+            randomKey = "0123456789ABCDEFGHIJKLMNOPQRSTUV",
+            masterPasswordEnabled = false,
+            masterPasswordVerifier = ""
+        )
+        val cipher = SimpleShellPcCryptoCompat.createCipher(config)
 
-    @Test
-    fun decryptTextOrNull_returnsNullOnInvalidFormat() {
-        assertNull(SimpleShellPcCryptoCompat.decryptTextOrNull("not-an-encrypted-payload"))
-        assertNull(SimpleShellPcCryptoCompat.decryptTextOrNull("abc:def")) // not hex / invalid iv length
-        assertNull(SimpleShellPcCryptoCompat.decryptTextOrNull("0011:")) // missing ciphertext
-    }
+        val payload = cipher.encryptText("hello")
 
-    @Test
-    fun encryptTextOrNull_roundTrips() {
-        val plain = "secret-password-123"
-        val encrypted = SimpleShellPcCryptoCompat.encryptTextOrNull(plain)
-        requireNotNull(encrypted)
-
-        // Basic shape: ivHex:cipherHex (16-byte IV => 32 hex chars)
-        val parts = encrypted.split(":")
-        assertEquals(2, parts.size)
-        assertEquals(32, parts[0].length)
-        assertTrue(parts[1].isNotEmpty())
-
-        val decrypted = SimpleShellPcCryptoCompat.decryptTextOrNull(encrypted)
-        assertEquals(plain, decrypted)
-    }
-
-    @Test
-    fun encryptMaybe_doesNotDoubleEncrypt() {
-        val encryptedFromNode = "000102030405060708090a0b0c0d0e0f:a3b92e1434a53ebf539b43bc77e80839"
-        assertEquals(encryptedFromNode, SimpleShellPcCryptoCompat.encryptMaybe(encryptedFromNode))
-        assertEquals("hello-world", SimpleShellPcCryptoCompat.decryptMaybe(encryptedFromNode))
+        assertTrue(payload.startsWith("ssv2:"))
+        assertEquals("hello", cipher.decryptText(payload))
     }
 }

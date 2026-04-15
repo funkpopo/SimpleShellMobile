@@ -2,6 +2,7 @@ package com.example.simpleshell
 
 import android.app.Application
 import android.util.Log
+import com.example.simpleshell.data.importing.SimpleShellPcCryptoCompat
 import dagger.hilt.android.HiltAndroidApp
 import org.bouncycastle.jce.provider.BouncyCastleProvider
 import java.security.Security
@@ -35,5 +36,7 @@ class SimpleShellApplication : Application() {
             // Don't crash on startup; we'll surface the underlying connection error later.
             Log.w("SimpleShell", "Failed to install BouncyCastle provider", t)
         }
+
+        SimpleShellPcCryptoCompat.initialize(this)
     }
 }

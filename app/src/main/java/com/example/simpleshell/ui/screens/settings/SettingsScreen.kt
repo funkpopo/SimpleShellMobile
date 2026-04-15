@@ -250,6 +250,56 @@ fun SettingsScreen(
         else -> Unit
     }
 
+    uiState.credentialPrompt?.let { prompt ->
+        var masterPassword by remember(prompt.mode, prompt.errorMessage) { mutableStateOf("") }
+        AlertDialog(
+            onDismissRequest = { viewModel.dismissCredentialPrompt() },
+            title = { Text(stringResource(R.string.pc_config_master_password_title)) },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Text(
+                        when (prompt.mode) {
+                            CredentialPromptMode.IMPORT_CONFIG ->
+                                stringResource(R.string.pc_config_master_password_import_message)
+                            CredentialPromptMode.RESTORE_WEBDAV ->
+                                stringResource(R.string.pc_config_master_password_restore_message)
+                        }
+                    )
+
+                    if (!prompt.errorMessage.isNullOrBlank()) {
+                        Text(
+                            text = prompt.errorMessage,
+                            color = MaterialTheme.colorScheme.error,
+                            style = MaterialTheme.typography.bodySmall
+                        )
+                    }
+
+                    OutlinedTextField(
+                        value = masterPassword,
+                        onValueChange = { masterPassword = it },
+                        label = { Text(stringResource(R.string.pc_config_master_password_label)) },
+                        singleLine = true,
+                        visualTransformation = PasswordVisualTransformation(),
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = { viewModel.submitCredentialPrompt(masterPassword) },
+                    enabled = masterPassword.isNotBlank()
+                ) {
+                    Text(stringResource(R.string.pc_config_master_password_confirm))
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { viewModel.dismissCredentialPrompt() }) {
+                    Text(stringResource(R.string.close))
+                }
+            }
+        )
+    }
+
     Scaffold(
         topBar = {
             TopAppBar(
